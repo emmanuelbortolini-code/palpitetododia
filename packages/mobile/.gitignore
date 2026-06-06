@@ -1,0 +1,12 @@
+# React Native / native build artifacts (gerados após o `init` nativo)
+ios/Pods/
+ios/build/
+android/.gradle/
+android/build/
+android/app/build/
+*.keystore
+!debug.keystore
+.env
+
+# Metro
+.metro-health-check*

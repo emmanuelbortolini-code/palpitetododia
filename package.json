@@ -9,5 +9,8 @@
     "dev": "npm run dev -w web",
     "build": "npm run build -w web",
     "lint": "npm run lint -w web"
+  },
+  "overrides": {
+    "react-native": "0.76.6"
   }
 }
