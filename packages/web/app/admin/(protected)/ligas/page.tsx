@@ -11,6 +11,7 @@ export default async function AdminLeaguesPage() {
   const { data: leagues } = await supabase
     .from('leagues')
     .select('id, name, is_active')
+    .eq('external_api_source', 'espn')
     .order('name', { ascending: true });
 
   return (

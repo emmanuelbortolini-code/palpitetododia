@@ -4,15 +4,21 @@ import { SyncTeamsForm } from '@/components/admin/sync-teams-form';
 
 export const dynamic = 'force-dynamic';
 
-const DEFAULT_SEASON = Number(process.env.API_FOOTBALL_SEASON ?? 2024);
-
 export default async function AdminTeamsPage() {
   await requireStaff(['admin']);
 
   const supabase = createAdminClient();
   const [{ data: leagues }, { data: teams }] = await Promise.all([
-    supabase.from('leagues').select('id, name').order('name', { ascending: true }),
-    supabase.from('teams').select('id, name, logo_url').order('name', { ascending: true }),
+    supabase
+      .from('leagues')
+      .select('id, name')
+      .eq('external_api_source', 'espn')
+      .order('name', { ascending: true }),
+    supabase
+      .from('teams')
+      .select('id, name, logo_url')
+      .eq('external_api_source', 'espn')
+      .order('name', { ascending: true }),
   ]);
 
   return (
@@ -23,7 +29,7 @@ export default async function AdminTeamsPage() {
       </p>
 
       <div className="mb-6">
-        <SyncTeamsForm leagues={leagues ?? []} defaultSeason={DEFAULT_SEASON} />
+        <SyncTeamsForm leagues={leagues ?? []} />
       </div>
 
       <h2 className="mb-2 text-sm font-medium text-gray-500">

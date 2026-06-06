@@ -27,16 +27,12 @@ export async function syncTeamsAction(
 ): Promise<ActionState> {
   await requireStaff(['admin']);
   const leagueId = String(formData.get('league_id') ?? '');
-  const season = Number(formData.get('season') ?? 0);
   if (!leagueId) return { error: 'Selecione uma liga.' };
-  if (!season) return { error: 'Informe a temporada.' };
 
   try {
-    const r = await syncTeamsForLeague(leagueId, season);
+    const r = await syncTeamsForLeague(leagueId);
     revalidatePath('/admin/equipes');
-    return {
-      message: `${r.league}: ${r.count} times sincronizados (temporada ${r.season}).`,
-    };
+    return { message: `${r.league}: ${r.count} times sincronizados.` };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Erro ao sincronizar times.' };
   }

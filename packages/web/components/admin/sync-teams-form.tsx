@@ -6,13 +6,7 @@ import { syncTeamsAction, type ActionState } from '@/lib/actions/refdata';
 
 type League = { id: string; name: string };
 
-export function SyncTeamsForm({
-  leagues,
-  defaultSeason,
-}: {
-  leagues: League[];
-  defaultSeason: number;
-}) {
+export function SyncTeamsForm({ leagues }: { leagues: League[] }) {
   const [state, formAction] = useFormState(syncTeamsAction, {} as ActionState);
 
   return (
@@ -32,17 +26,6 @@ export function SyncTeamsForm({
                 </option>
               ))}
             </select>
-          </label>
-          <label className="flex flex-col text-sm">
-            Temporada
-            <input
-              name="season"
-              type="number"
-              defaultValue={defaultSeason}
-              min={2022}
-              max={2024}
-              className="w-24 rounded border px-2 py-1 dark:bg-gray-900"
-            />
           </label>
           <div className="w-48">
             <SubmitButton>Sincronizar times</SubmitButton>
