@@ -20,6 +20,23 @@ export type ApiFixture = {
   goals: { home: number | null; away: number | null };
 };
 
+export type ApiTeamFull = {
+  team: {
+    id: number;
+    name: string;
+    code: string | null;
+    country: string | null;
+    founded: number | null;
+    logo: string | null;
+  };
+  venue: {
+    name: string | null;
+    address: string | null;
+    city: string | null;
+    capacity: number | null;
+  };
+};
+
 /** GET genérico contra a API-Football, com timeout e tratamento de `errors`. */
 async function apiGet<T>(path: string): Promise<T[]> {
   const controller = new AbortController();
@@ -48,4 +65,9 @@ async function apiGet<T>(path: string): Promise<T[]> {
 /** Busca todas as partidas de uma liga numa temporada. */
 export function fetchFixtures(leagueId: number, season: number): Promise<ApiFixture[]> {
   return apiGet<ApiFixture>(`/fixtures?league=${leagueId}&season=${season}`);
+}
+
+/** Busca os times de uma liga numa temporada (inclui fundação e estádio). */
+export function fetchTeams(leagueId: number, season: number): Promise<ApiTeamFull[]> {
+  return apiGet<ApiTeamFull>(`/teams?league=${leagueId}&season=${season}`);
 }
