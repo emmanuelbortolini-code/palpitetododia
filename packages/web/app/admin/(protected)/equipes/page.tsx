@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { SyncAllTeamsButton } from '@/components/admin/sync-all-teams-button';
+import { ImportTeamsForm } from '@/components/admin/import-teams-form';
 
 export const dynamic = 'force-dynamic';
 
 const SIZES = [10, 20, 50];
-const SOURCE = 'api_football';
+const SOURCE = 'csv';
 
 type SearchParams = {
   country?: string;
@@ -30,24 +30,26 @@ export default async function AdminTeamsPage({
   const fLeague = searchParams.league ?? '';
   const fSeason = searchParams.season ?? '';
 
-  // Vínculos time↔liga↔temporada (poucas centenas de linhas) — base dos filtros.
-  const { data: links } = await supabase
+  // Vínculos time↔liga↔temporada da fonte CSV (base dos filtros liga/temporada).
+  const { data: rawLinks } = await supabase
     .from('team_leagues')
-    .select('team_id, league_id, season, league:league_id(name)');
+    .select('team_id, league_id, season, league:league_id(name, external_api_source)');
+  const links = (rawLinks ?? []).filter(
+    (l) => (l.league as unknown as { external_api_source: string } | null)?.external_api_source === SOURCE,
+  );
 
   const leagueOptions = new Map<string, string>();
   const seasonOptions = new Set<number>();
-  for (const l of links ?? []) {
+  for (const l of links) {
     const lg = l.league as unknown as { name: string } | null;
     if (lg) leagueOptions.set(l.league_id, lg.name);
     seasonOptions.add(l.season);
   }
 
-  // team_ids que casam com os filtros de liga/temporada.
   let teamIdFilter: string[] | null = null;
   if (fLeague || fSeason) {
     const ids = new Set<string>();
-    for (const l of links ?? []) {
+    for (const l of links) {
       if (fLeague && l.league_id !== fLeague) continue;
       if (fSeason && String(l.season) !== fSeason) continue;
       ids.add(l.team_id);
@@ -85,11 +87,11 @@ export default async function AdminTeamsPage({
     <main className="mx-auto max-w-3xl p-6">
       <h1 className="mb-2 text-2xl font-bold">Equipes</h1>
       <p className="mb-4 text-sm text-gray-500">
-        Importe todos os times (Série A–D, temporadas 2022–2024) da API-Football.
+        Importe um CSV de equipes (nome, fundação, estádio, endereço, site, apelidos…).
       </p>
 
-      <div className="mb-6">
-        <SyncAllTeamsButton />
+      <div className="mb-6 rounded border p-4">
+        <ImportTeamsForm />
       </div>
 
       {/* Filtros (GET — sem JS) */}
@@ -144,7 +146,7 @@ export default async function AdminTeamsPage({
 
       <p className="mb-2 text-sm text-gray-500">{total} times</p>
 
-      {!teams.length && <p className="text-gray-500">Nenhum time encontrado.</p>}
+      {!teams.length && <p className="text-gray-500">Nenhum time. Importe um CSV acima.</p>}
 
       <table className="w-full text-sm">
         <tbody>

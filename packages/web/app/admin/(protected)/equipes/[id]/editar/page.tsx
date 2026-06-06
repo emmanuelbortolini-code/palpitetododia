@@ -19,7 +19,7 @@ export default async function EditarEquipePage({
     supabase
       .from('teams')
       .select(
-        'id, name, country_id, founded, venue_name, venue_address, venue_city, venue_capacity, website',
+        'id, name, name_en, name_es, country_id, founded, venue_name, venue_address, venue_city, venue_capacity, website, gender, nicknames_pt, nicknames_en, nicknames_es',
       )
       .eq('id', params.id)
       .maybeSingle(),
