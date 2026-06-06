@@ -1,8 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
-import { getCurrentUser } from '@/lib/auth/roles';
+import { requireStaff } from '@/lib/auth/staff';
 import { syncMatches } from '@/lib/sync/matches';
 
 export type ActionState = { error?: string; message?: string };
@@ -12,9 +11,7 @@ export async function syncNow(
   _prev: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin') return { error: 'Apenas administradores podem sincronizar.' };
+  await requireStaff(['admin']);
 
   try {
     const r = await syncMatches();

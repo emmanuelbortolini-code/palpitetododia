@@ -1,17 +1,14 @@
-import { redirect } from 'next/navigation';
 import { PREDICTION_TYPE_LABELS } from 'shared';
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentUser } from '@/lib/auth/roles';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireStaff } from '@/lib/auth/staff';
 import { markResult } from '@/lib/actions/predictions';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminPredictionsPage() {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin' && me.role !== 'content_manager') redirect('/dashboard');
+  await requireStaff(['admin', 'content_manager']);
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
   const { data: predictions } = await supabase
     .from('predictions')
     .select(

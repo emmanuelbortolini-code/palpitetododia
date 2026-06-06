@@ -1,10 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 
-export type AppRole =
-  | 'admin'
-  | 'content_manager'
-  | 'affiliate_manager'
-  | 'freelancer';
+// Papéis de consumidor (public.users). Staff vive em public.staff_users com auth
+// própria — ver lib/auth/staff.ts.
+export type AppRole = 'user' | 'freelancer';
 
 export type CurrentUser = {
   id: string;

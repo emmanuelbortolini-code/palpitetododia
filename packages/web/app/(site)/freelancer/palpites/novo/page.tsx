@@ -9,8 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function NewPredictionPage() {
   const me = await getCurrentUser();
   if (!me) redirect('/login');
-  const canTip = me.is_tipster || me.role === 'admin' || me.role === 'content_manager';
-  if (!canTip) redirect('/dashboard');
+  if (!me.is_tipster) redirect('/dashboard');
 
   const matches = await getMatchOptions();
 

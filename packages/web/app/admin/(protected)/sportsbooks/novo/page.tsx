@@ -1,13 +1,10 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { getCurrentUser } from '@/lib/auth/roles';
+import { requireStaff } from '@/lib/auth/staff';
 import { SportsbookForm } from '@/components/sportsbooks/sportsbook-form';
 import { createSportsbook } from '@/lib/actions/sportsbooks';
 
 export default async function NovaSportsbookPage() {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin' && me.role !== 'affiliate_manager') redirect('/dashboard');
+  await requireStaff(['admin', 'affiliate_manager']);
 
   return (
     <main className="mx-auto max-w-2xl p-6">

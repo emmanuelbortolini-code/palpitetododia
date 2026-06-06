@@ -1,13 +1,10 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { getCurrentUser } from '@/lib/auth/roles';
+import { requireStaff } from '@/lib/auth/staff';
 import { AcademyForm } from '@/components/academy/academy-form';
 import { createAcademy } from '@/lib/actions/academy';
 
 export default async function NovoAcademiaPage() {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin' && me.role !== 'content_manager') redirect('/dashboard');
+  await requireStaff(['admin', 'content_manager']);
 
   return (
     <main className="mx-auto max-w-2xl p-6">

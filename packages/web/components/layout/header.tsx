@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import { getCurrentUser } from '@/lib/auth/roles';
-import { signOut } from '@/app/(auth)/actions';
+import { signOut } from '@/app/(site)/(auth)/actions';
 
 const linkClass = 'text-sm text-gray-700 hover:text-blue-600 dark:text-gray-300';
 
 export async function Header() {
   const me = await getCurrentUser();
-  const isContentStaff = me?.role === 'admin' || me?.role === 'content_manager';
-  const isAffiliateStaff = me?.role === 'admin' || me?.role === 'affiliate_manager';
-  const canTip = !!me && (me.is_tipster || isContentStaff);
+  // Header do site público/consumidor. Ferramentas de staff vivem só em /admin
+  // (área separada, com auth própria) — nenhum link de /admin aparece aqui.
+  const isFreelancer = me?.role === 'freelancer';
 
   return (
     <header className="border-b">
@@ -33,44 +33,14 @@ export async function Header() {
           Ranking
         </Link>
 
-        {me && (
+        {isFreelancer && (
           <>
             <Link href="/freelancer/noticias" className={linkClass}>
               Minhas notícias
             </Link>
-            {canTip && (
-              <Link href="/freelancer/palpites" className={linkClass}>
-                Meus palpites
-              </Link>
-            )}
-            {isContentStaff && (
-              <>
-                <Link href="/admin/noticias" className={linkClass}>
-                  Revisão
-                </Link>
-                <Link href="/admin/academia" className={linkClass}>
-                  Academia (admin)
-                </Link>
-                <Link href="/admin/palpites" className={linkClass}>
-                  Palpites (admin)
-                </Link>
-              </>
-            )}
-            {me.role === 'admin' && (
-              <Link href="/admin/jogos" className={linkClass}>
-                Jogos
-              </Link>
-            )}
-            {isAffiliateStaff && (
-              <>
-                <Link href="/admin/sportsbooks" className={linkClass}>
-                  Casas (admin)
-                </Link>
-                <Link href="/admin/afiliados" className={linkClass}>
-                  Afiliados
-                </Link>
-              </>
-            )}
+            <Link href="/freelancer/palpites" className={linkClass}>
+              Meus palpites
+            </Link>
           </>
         )}
 

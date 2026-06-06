@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { articleSchema } from 'shared';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireStaff } from '@/lib/auth/staff';
 
 export type ActionState = { error?: string; message?: string };
 
@@ -113,19 +115,15 @@ export async function submitForReview(formData: FormData): Promise<void> {
 }
 
 export async function approveArticle(formData: FormData): Promise<void> {
+  await requireStaff(['admin', 'content_manager']);
   const id = String(formData.get('id'));
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
+  const supabase = createAdminClient();
   await supabase
     .from('articles')
     .update({
       status: 'published',
       published_at: new Date().toISOString(),
-      published_by_admin_id: user.id,
+      published_by_admin_id: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);
@@ -134,9 +132,10 @@ export async function approveArticle(formData: FormData): Promise<void> {
 }
 
 export async function rejectArticle(formData: FormData): Promise<void> {
+  await requireStaff(['admin', 'content_manager']);
   const id = String(formData.get('id'));
   const reason = String(formData.get('rejection_reason') || '');
-  const supabase = createClient();
+  const supabase = createAdminClient();
   await supabase
     .from('articles')
     .update({

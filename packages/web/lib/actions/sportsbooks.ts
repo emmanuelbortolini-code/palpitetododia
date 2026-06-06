@@ -4,9 +4,12 @@ import { randomUUID } from 'crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { sportsbookSchema } from 'shared';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireStaff } from '@/lib/auth/staff';
 
 export type ActionState = { error?: string; message?: string };
+
+const AFFILIATE_ROLES = ['admin', 'affiliate_manager'] as const;
 
 function slugify(name: string): string {
   const base = name
@@ -35,10 +38,11 @@ export async function createSportsbook(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  await requireStaff([...AFFILIATE_ROLES]);
   const parsed = parseForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
   const d = parsed.data;
   const { error } = await supabase.from('sportsbooks').insert({
     name: d.name,
@@ -61,10 +65,11 @@ export async function updateSportsbook(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  await requireStaff([...AFFILIATE_ROLES]);
   const parsed = parseForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
   const d = parsed.data;
   const { error } = await supabase
     .from('sportsbooks')
@@ -87,9 +92,10 @@ export async function updateSportsbook(
 }
 
 export async function toggleSportsbookActive(formData: FormData): Promise<void> {
+  await requireStaff([...AFFILIATE_ROLES]);
   const id = String(formData.get('id'));
   const next = formData.get('is_active') === 'true';
-  const supabase = createClient();
+  const supabase = createAdminClient();
   await supabase
     .from('sportsbooks')
     .update({ is_active: next, updated_at: new Date().toISOString() })

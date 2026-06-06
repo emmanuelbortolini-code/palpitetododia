@@ -1,15 +1,12 @@
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentUser } from '@/lib/auth/roles';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireStaff } from '@/lib/auth/staff';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminAffiliatesPage() {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin' && me.role !== 'affiliate_manager') redirect('/dashboard');
+  await requireStaff(['admin', 'affiliate_manager']);
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
 
   const { data: sportsbooks } = await supabase
     .from('sportsbooks')

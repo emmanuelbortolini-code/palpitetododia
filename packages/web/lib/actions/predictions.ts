@@ -4,7 +4,9 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { predictionSchema } from 'shared';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentUser } from '@/lib/auth/roles';
+import { requireStaff } from '@/lib/auth/staff';
 import { applyPredictionResult } from '@/lib/gamification/award';
 
 export type ActionState = { error?: string; message?: string };
@@ -111,21 +113,19 @@ export async function publishPrediction(formData: FormData): Promise<void> {
 
 // Admin/staff marca o resultado de um palpite publicado.
 export async function markResult(formData: FormData): Promise<void> {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin' && me.role !== 'content_manager') return;
+  await requireStaff(['admin', 'content_manager']);
 
   const id = String(formData.get('id'));
   const result = String(formData.get('result')); // won | lost | voided
   if (!['won', 'lost', 'voided'].includes(result)) return;
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
   await supabase
     .from('predictions')
     .update({
       status: result,
       result_marked_at: new Date().toISOString(),
-      result_marked_by_admin_id: me.id,
+      result_marked_by_admin_id: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);

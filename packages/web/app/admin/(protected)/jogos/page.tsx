@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentUser } from '@/lib/auth/roles';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireStaff } from '@/lib/auth/staff';
 import { SyncButton } from '@/components/admin/sync-button';
 
 export const dynamic = 'force-dynamic';
@@ -14,11 +13,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function AdminMatchesPage() {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin') redirect('/dashboard');
+  await requireStaff(['admin']);
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
   const { count } = await supabase
     .from('matches')
     .select('id', { count: 'exact', head: true });

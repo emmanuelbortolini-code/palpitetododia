@@ -1,17 +1,14 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentUser } from '@/lib/auth/roles';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireStaff } from '@/lib/auth/staff';
 import { toggleSportsbookActive } from '@/lib/actions/sportsbooks';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminSportsbooksPage() {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin' && me.role !== 'affiliate_manager') redirect('/dashboard');
+  await requireStaff(['admin', 'affiliate_manager']);
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
   const { data: books } = await supabase
     .from('sportsbooks')
     .select('id, name, commission_type, commission_rate, is_active')

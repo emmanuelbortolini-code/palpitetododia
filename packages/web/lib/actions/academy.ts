@@ -4,9 +4,12 @@ import { randomUUID } from 'crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { academySchema } from 'shared';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireStaff } from '@/lib/auth/staff';
 
 export type ActionState = { error?: string; message?: string };
+
+const CONTENT_ROLES = ['admin', 'content_manager'] as const;
 
 function slugify(title: string): string {
   const base = title
@@ -34,15 +37,11 @@ export async function createAcademy(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  await requireStaff([...CONTENT_ROLES]);
   const parsed = parseForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
+  const supabase = createAdminClient();
   const d = parsed.data;
   const { error } = await supabase.from('academy_articles').insert({
     title: d.title,
@@ -52,7 +51,7 @@ export async function createAcademy(
     difficulty: d.difficulty,
     order_position: d.order_position,
     estimated_read_minutes: d.estimated_read_minutes,
-    author_id: user.id,
+    author_id: null,
   });
   if (error) return { error: error.message };
 
@@ -65,10 +64,11 @@ export async function updateAcademy(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  await requireStaff([...CONTENT_ROLES]);
   const parsed = parseForm(formData);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
   const d = parsed.data;
   const { error } = await supabase
     .from('academy_articles')
@@ -89,19 +89,15 @@ export async function updateAcademy(
 }
 
 export async function publishAcademy(formData: FormData): Promise<void> {
+  await requireStaff([...CONTENT_ROLES]);
   const id = String(formData.get('id'));
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
+  const supabase = createAdminClient();
   await supabase
     .from('academy_articles')
     .update({
       status: 'published',
       published_at: new Date().toISOString(),
-      published_by_admin_id: user.id,
+      published_by_admin_id: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);
@@ -110,8 +106,9 @@ export async function publishAcademy(formData: FormData): Promise<void> {
 }
 
 export async function unpublishAcademy(formData: FormData): Promise<void> {
+  await requireStaff([...CONTENT_ROLES]);
   const id = String(formData.get('id'));
-  const supabase = createClient();
+  const supabase = createAdminClient();
   await supabase
     .from('academy_articles')
     .update({ status: 'draft', updated_at: new Date().toISOString() })

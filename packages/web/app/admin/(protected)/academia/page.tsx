@@ -1,7 +1,6 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentUser } from '@/lib/auth/roles';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireStaff } from '@/lib/auth/staff';
 import { publishAcademy, unpublishAcademy } from '@/lib/actions/academy';
 
 export const dynamic = 'force-dynamic';
@@ -13,11 +12,9 @@ const statusLabel: Record<string, string> = {
 };
 
 export default async function AdminAcademiaPage() {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin' && me.role !== 'content_manager') redirect('/dashboard');
+  await requireStaff(['admin', 'content_manager']);
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
   const { data: articles } = await supabase
     .from('academy_articles')
     .select('id, title, status, order_position')

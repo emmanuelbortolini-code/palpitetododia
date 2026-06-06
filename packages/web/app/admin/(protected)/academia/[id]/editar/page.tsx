@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentUser } from '@/lib/auth/roles';
+import { notFound } from 'next/navigation';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireStaff } from '@/lib/auth/staff';
 import { AcademyForm } from '@/components/academy/academy-form';
 import { updateAcademy } from '@/lib/actions/academy';
 
@@ -12,11 +12,9 @@ export default async function EditarAcademiaPage({
 }: {
   params: { id: string };
 }) {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin' && me.role !== 'content_manager') redirect('/dashboard');
+  await requireStaff(['admin', 'content_manager']);
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
   const { data: article } = await supabase
     .from('academy_articles')
     .select('id, title, content, cover_image_url, difficulty, order_position, estimated_read_minutes')

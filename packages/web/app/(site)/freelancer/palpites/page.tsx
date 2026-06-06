@@ -20,8 +20,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function FreelancerPredictionsPage() {
   const me = await getCurrentUser();
   if (!me) redirect('/login');
-  const canTip = me.is_tipster || me.role === 'admin' || me.role === 'content_manager';
-  if (!canTip) redirect('/dashboard');
+  if (!me.is_tipster) redirect('/dashboard');
 
   const supabase = createClient();
   const { data: predictions } = await supabase

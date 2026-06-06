@@ -1,18 +1,13 @@
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentUser } from '@/lib/auth/roles';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { requireStaff } from '@/lib/auth/staff';
 import { approveArticle, rejectArticle } from '@/lib/actions/news';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminNoticiasPage() {
-  const me = await getCurrentUser();
-  if (!me) redirect('/login');
-  if (me.role !== 'admin' && me.role !== 'content_manager') {
-    redirect('/dashboard');
-  }
+  await requireStaff(['admin', 'content_manager']);
 
-  const supabase = createClient();
+  const supabase = createAdminClient();
   const { data: articles } = await supabase
     .from('articles')
     .select('id, title, excerpt, author_id')
