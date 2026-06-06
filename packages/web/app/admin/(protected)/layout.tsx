@@ -20,7 +20,13 @@ export default async function AdminLayout({
           { href: '/admin/palpites', label: 'Palpites' },
         ]
       : []),
-    ...(staff.role === 'admin' ? [{ href: '/admin/jogos', label: 'Jogos' }] : []),
+    ...(staff.role === 'admin'
+      ? [
+          { href: '/admin/jogos', label: 'Jogos' },
+          { href: '/admin/equipes', label: 'Equipes' },
+          { href: '/admin/ligas', label: 'Ligas' },
+        ]
+      : []),
     ...(isAffiliate
       ? [
           { href: '/admin/sportsbooks', label: 'Casas de apostas' },

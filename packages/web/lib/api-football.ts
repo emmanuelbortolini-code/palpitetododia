@@ -20,16 +20,21 @@ export type ApiFixture = {
   goals: { home: number | null; away: number | null };
 };
 
-/** Busca todas as partidas de uma liga numa temporada. */
-export async function fetchFixtures(
-  leagueId: number,
-  season: number,
-): Promise<ApiFixture[]> {
-  const url = `${BASE_URL}/fixtures?league=${leagueId}&season=${season}`;
+export type ApiLeague = {
+  league: { id: number; name: string; type: string; logo: string | null };
+  country: { name: string; code: string | null; flag: string | null };
+};
+
+export type ApiTeamItem = {
+  team: { id: number; name: string; logo: string | null };
+};
+
+/** GET genérico contra a API-Football, com timeout e tratamento de `errors`. */
+async function apiGet<T>(path: string): Promise<T[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT);
   try {
-    const res = await fetch(url, {
+    const res = await fetch(`${BASE_URL}${path}`, {
       headers: { 'x-apisports-key': KEY },
       signal: controller.signal,
       cache: 'no-store',
@@ -43,8 +48,23 @@ export async function fetchFixtures(
     if (hasError) {
       throw new Error(`API-Football: ${JSON.stringify(errors)}`);
     }
-    return (json.response ?? []) as ApiFixture[];
+    return (json.response ?? []) as T[];
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Busca todas as partidas de uma liga numa temporada. */
+export function fetchFixtures(leagueId: number, season: number): Promise<ApiFixture[]> {
+  return apiGet<ApiFixture>(`/fixtures?league=${leagueId}&season=${season}`);
+}
+
+/** Busca as ligas de um país (ex.: "Brazil"). */
+export function fetchLeagues(country: string): Promise<ApiLeague[]> {
+  return apiGet<ApiLeague>(`/leagues?country=${encodeURIComponent(country)}`);
+}
+
+/** Busca os times de uma liga numa temporada. */
+export function fetchTeams(leagueId: number, season: number): Promise<ApiTeamItem[]> {
+  return apiGet<ApiTeamItem>(`/teams?league=${leagueId}&season=${season}`);
 }
