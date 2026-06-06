@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { requireStaff, logoutStaff } from '@/lib/auth/staff';
-
-const linkClass = 'text-sm text-gray-700 hover:text-blue-600 dark:text-gray-300';
+import { AdminSidebarNav } from '@/components/admin/sidebar-nav';
 
 export default async function AdminLayout({
   children,
@@ -12,56 +11,52 @@ export default async function AdminLayout({
   const isContent = staff.role === 'admin' || staff.role === 'content_manager';
   const isAffiliate = staff.role === 'admin' || staff.role === 'affiliate_manager';
 
+  // Itens da sidebar filtrados pelo papel do staff.
+  const items = [
+    ...(isContent
+      ? [
+          { href: '/admin/noticias', label: 'Revisão' },
+          { href: '/admin/academia', label: 'Academia' },
+          { href: '/admin/palpites', label: 'Palpites' },
+        ]
+      : []),
+    ...(staff.role === 'admin' ? [{ href: '/admin/jogos', label: 'Jogos' }] : []),
+    ...(isAffiliate
+      ? [
+          { href: '/admin/sportsbooks', label: 'Casas de apostas' },
+          { href: '/admin/afiliados', label: 'Afiliados' },
+        ]
+      : []),
+  ];
+
   return (
-    <>
-      <header className="border-b bg-gray-50 dark:bg-gray-900">
-        <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-2 p-4">
+    <div className="flex min-h-screen">
+      <aside className="flex w-1/5 min-w-[200px] flex-col border-r bg-gray-50 dark:bg-gray-900">
+        <div className="border-b p-4">
           <Link href="/admin" className="font-bold">
             Painel
           </Link>
+        </div>
 
-          {isContent && (
-            <>
-              <Link href="/admin/noticias" className={linkClass}>
-                Revisão
-              </Link>
-              <Link href="/admin/academia" className={linkClass}>
-                Academia
-              </Link>
-              <Link href="/admin/palpites" className={linkClass}>
-                Palpites
-              </Link>
-            </>
-          )}
-          {staff.role === 'admin' && (
-            <Link href="/admin/jogos" className={linkClass}>
-              Jogos
-            </Link>
-          )}
-          {isAffiliate && (
-            <>
-              <Link href="/admin/sportsbooks" className={linkClass}>
-                Casas
-              </Link>
-              <Link href="/admin/afiliados" className={linkClass}>
-                Afiliados
-              </Link>
-            </>
-          )}
-
-          <div className="ml-auto flex items-center gap-4">
-            <span className="text-sm text-gray-500">
-              {staff.full_name ?? staff.email} · {staff.role}
-            </span>
-            <form action={logoutStaff}>
-              <button type="submit" className={linkClass}>
-                Sair
-              </button>
-            </form>
-          </div>
+        <nav className="flex-1 p-2">
+          <AdminSidebarNav items={items} />
         </nav>
-      </header>
-      {children}
-    </>
+
+        <div className="border-t p-4 text-sm">
+          <p className="mb-2 text-gray-500">
+            {staff.full_name ?? staff.email}
+            <br />
+            <span className="text-xs">{staff.role}</span>
+          </p>
+          <form action={logoutStaff}>
+            <button type="submit" className="text-gray-600 hover:text-gray-900 dark:text-gray-400">
+              Sair
+            </button>
+          </form>
+        </div>
+      </aside>
+
+      <div className="flex-1">{children}</div>
+    </div>
   );
 }
