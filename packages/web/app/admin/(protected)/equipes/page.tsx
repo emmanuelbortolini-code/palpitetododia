@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 const SIZES = [10, 20, 50];
 
 type SearchParams = {
+  q?: string;
   country?: string;
   league?: string;
   season?: string;
@@ -25,6 +26,7 @@ export default async function AdminTeamsPage({
 
   const size = SIZES.includes(Number(searchParams.size)) ? Number(searchParams.size) : 20;
   const page = Math.max(1, Number(searchParams.page) || 1);
+  const fQ = (searchParams.q ?? '').trim();
   const fCountry = searchParams.country ?? '';
   const fLeague = searchParams.league ?? '';
   const fSeason = searchParams.season ?? '';
@@ -64,6 +66,7 @@ export default async function AdminTeamsPage({
     .select('id, name, logo_url, founded, venue_name')
     .is('merged_into', null)
     .order('name', { ascending: true });
+  if (fQ) query = query.ilike('name', `%${fQ}%`);
   if (fCountry) query = query.eq('country_id', fCountry);
   if (teamIdFilter) query = query.in('id', teamIdFilter.length ? teamIdFilter : ['']);
 
@@ -75,7 +78,7 @@ export default async function AdminTeamsPage({
 
   const qs = (over: Partial<SearchParams>) => {
     const p = new URLSearchParams();
-    const merged = { country: fCountry, league: fLeague, season: fSeason, size: String(size), ...over };
+    const merged = { q: fQ, country: fCountry, league: fLeague, season: fSeason, size: String(size), ...over };
     for (const [k, val] of Object.entries(merged)) if (val) p.set(k, String(val));
     return `?${p.toString()}`;
   };
@@ -101,6 +104,15 @@ export default async function AdminTeamsPage({
 
       {/* Filtros (GET — sem JS) */}
       <form method="get" className="mb-4 flex flex-wrap items-end gap-2">
+        <label className="flex flex-col text-sm">
+          Nome
+          <input
+            name="q"
+            defaultValue={fQ}
+            placeholder="Buscar time…"
+            className="rounded border px-2 py-1 dark:bg-gray-900"
+          />
+        </label>
         <label className="flex flex-col text-sm">
           País
           <select name="country" defaultValue={fCountry} className="rounded border px-2 py-1 dark:bg-gray-900">
