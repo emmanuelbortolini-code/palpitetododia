@@ -17,6 +17,12 @@ export function ImportTeamsForm() {
         <div className="w-40">
           <SubmitButton>Importar CSV</SubmitButton>
         </div>
+        <a
+          href="/admin/equipes/export"
+          className="w-40 rounded bg-blue-600 px-4 py-2 text-center font-medium text-white hover:bg-blue-700"
+        >
+          Exportar CSV
+        </a>
       </div>
       <p className="text-xs text-gray-500">
         Atualiza times existentes pelo ID (mesmo do export). Campos preenchidos viram edição manual.

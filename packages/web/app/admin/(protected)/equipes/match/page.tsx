@@ -50,10 +50,18 @@ export default async function MatchTeamsPage() {
   // Para a lista de "vinculados", também resolve nome da canônica (pode ser ESPN-only).
   const byId = new Map(teams.map((t) => [t.id, t]));
 
+  // Canônicas que JÁ têm um ESPN vinculado não entram como sugestão (já pareadas).
+  const hasEspn = new Set<string>();
+  for (const t of teams) {
+    if (t.merged_into && t.espn_id) hasEspn.add(t.merged_into);
+    if (!t.merged_into && t.espn_id) hasEspn.add(t.id);
+  }
+  const candidatePool = canonicals.filter((c) => !hasEspn.has(c.id));
+
   // Para cada ESPN livre, candidatos do mesmo país ordenados por similaridade.
   const rows = espnFree
     .map((e) => {
-      const cands = canonicals
+      const cands = candidatePool
         .filter((c) => c.country_id === e.country_id)
         .map((c) => ({ c, sc: score(e.name, c.name) }))
         .sort((a, b) => b.sc - a.sc)

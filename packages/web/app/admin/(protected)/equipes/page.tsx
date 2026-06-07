@@ -92,12 +92,12 @@ export default async function AdminTeamsPage({
 
       <div className="mb-6 rounded border p-4">
         <ImportTeamsForm />
-        <div className="mt-3 flex gap-4 text-sm">
-          <a href="/admin/equipes/export" className="text-blue-600 hover:underline">
-            ↓ Exportar CSV
-          </a>
-          <Link href="/admin/equipes/match" className="text-blue-600 hover:underline">
-            ⇄ Vincular ESPN ↔ API-Football
+        <div className="mt-3">
+          <Link
+            href="/admin/equipes/match"
+            className="inline-block w-40 rounded border border-blue-600 px-4 py-2 text-center font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+          >
+            Times para Vincular
           </Link>
         </div>
       </div>
