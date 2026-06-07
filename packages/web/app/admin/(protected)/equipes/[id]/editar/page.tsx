@@ -3,40 +3,248 @@ import { notFound } from 'next/navigation';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { TeamForm } from '@/components/admin/team-form';
-import { updateTeam } from '@/lib/actions/teams';
+import { updateTeam, linkProvider, unlinkProvider, type Source } from '@/lib/actions/teams';
 
 export const dynamic = 'force-dynamic';
 
+type Tab = 'atual' | 'espn' | 'football';
+type SearchParams = { tab?: string; q?: string };
+
+const FORM_COLS =
+  'id, name, name_en, name_es, country_id, founded, venue_name, venue_address, venue_city, venue_capacity, website, gender_en, gender_br, gender_es, nicknames_pt, nicknames_en, nicknames_es';
+const PROVIDER_COLS = 'api_football_id, espn_id, api_football_data, espn_data, country_id';
+
+const SOURCE_LABEL: Record<Source, string> = { espn: 'ESPN', football: 'Football API' };
+const SOURCE_ID_COL: Record<Source, string> = { espn: 'espn_id', football: 'api_football_id' };
+const SOURCE_DATA_COL: Record<Source, string> = { espn: 'espn_data', football: 'api_football_data' };
+const FIELD_LABELS: Record<Source, [string, string][]> = {
+  espn: [
+    ['name', 'Nome'],
+    ['logo_url', 'Logo'],
+  ],
+  football: [
+    ['name', 'Nome'],
+    ['code', 'Código'],
+    ['logo_url', 'Logo'],
+    ['founded', 'Fundação'],
+    ['venue_name', 'Estádio'],
+    ['venue_address', 'Endereço'],
+    ['venue_city', 'Cidade'],
+    ['venue_capacity', 'Capacidade'],
+    ['website', 'Site'],
+  ],
+};
+
+const norm = (s: string) =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function score(a: string, b: string): number {
+  const ta = new Set(norm(a).split(' ').filter(Boolean));
+  const tb = new Set(norm(b).split(' ').filter(Boolean));
+  if (!ta.size || !tb.size) return 0;
+  let inter = 0;
+  for (const t of ta) if (tb.has(t)) inter++;
+  return inter / (ta.size + tb.size - inter);
+}
+
 export default async function EditarEquipePage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: SearchParams;
 }) {
   await requireStaff(['admin']);
-
   const supabase = createAdminClient();
-  const [{ data: team }, { data: countries }] = await Promise.all([
+
+  const [{ data: team }, { data: countries }, { data: aliases }] = await Promise.all([
+    supabase.from('teams').select(`${FORM_COLS}, ${PROVIDER_COLS}`).eq('id', params.id).maybeSingle(),
+    supabase.from('countries').select('id, name').order('name', { ascending: true }),
     supabase
       .from('teams')
-      .select(
-        'id, name, name_en, name_es, country_id, founded, venue_name, venue_address, venue_city, venue_capacity, website, gender, nicknames_pt, nicknames_en, nicknames_es',
-      )
-      .eq('id', params.id)
-      .maybeSingle(),
-    supabase.from('countries').select('id, name').order('name', { ascending: true }),
+      .select('id, api_football_id, espn_id, api_football_data, espn_data')
+      .eq('merged_into', params.id),
   ]);
-
   if (!team) notFound();
 
-  const action = updateTeam.bind(null, team.id);
+  const t = team as Record<string, unknown>;
+  const tab: Tab = searchParams.tab === 'espn' || searchParams.tab === 'football' ? searchParams.tab : 'atual';
+
+  // Registro de cada fonte: a própria linha (se tem o id) ou um alias.
+  const providerOf = (src: Source) => {
+    const idCol = SOURCE_ID_COL[src];
+    const dataCol = SOURCE_DATA_COL[src];
+    if (t[idCol]) return { id: t[idCol] as string, data: (t[dataCol] ?? {}) as Record<string, unknown> };
+    const a = (aliases ?? []).find((x) => (x as Record<string, unknown>)[idCol]);
+    if (a) {
+      const ar = a as Record<string, unknown>;
+      return { id: ar[idCol] as string, data: (ar[dataCol] ?? {}) as Record<string, unknown> };
+    }
+    return null;
+  };
+
+  const TabLink = ({ to, children }: { to: Tab; children: React.ReactNode }) => (
+    <Link
+      href={`/admin/equipes/${params.id}/editar${to === 'atual' ? '' : `?tab=${to}`}`}
+      className={`border-b-2 px-3 py-2 text-sm ${
+        tab === to ? 'border-blue-600 font-medium text-blue-600' : 'border-transparent text-gray-500'
+      }`}
+    >
+      {children}
+    </Link>
+  );
 
   return (
     <main className="mx-auto max-w-2xl p-6">
       <Link href="/admin/equipes" className="text-sm text-blue-600 hover:underline">
         ← Equipes
       </Link>
-      <h1 className="my-4 text-2xl font-bold">Editar {team.name}</h1>
-      <TeamForm action={action} countries={countries ?? []} defaultValues={team} />
+      <h1 className="my-3 text-2xl font-bold">Editar {team.name as string}</h1>
+
+      <div className="mb-5 flex gap-1 border-b">
+        <TabLink to="atual">Dados Atuais</TabLink>
+        <TabLink to="espn">Dados ESPN</TabLink>
+        <TabLink to="football">Dados Football API</TabLink>
+      </div>
+
+      {tab === 'atual' && (
+        <TeamForm
+          action={updateTeam.bind(null, team.id as string)}
+          countries={countries ?? []}
+          defaultValues={team as never}
+        />
+      )}
+
+      {tab !== 'atual' && (
+        <ProviderTab
+          teamId={params.id}
+          teamName={team.name as string}
+          countryId={t.country_id as string}
+          source={tab}
+          record={providerOf(tab)}
+          q={searchParams.q ?? ''}
+          supabase={supabase}
+        />
+      )}
     </main>
+  );
+}
+
+async function ProviderTab({
+  teamId,
+  teamName,
+  countryId,
+  source,
+  record,
+  q,
+  supabase,
+}: {
+  teamId: string;
+  teamName: string;
+  countryId: string;
+  source: Source;
+  record: { id: string; data: Record<string, unknown> } | null;
+  q: string;
+  supabase: ReturnType<typeof createAdminClient>;
+}) {
+  if (record) {
+    const d = record.data;
+    return (
+      <div className="rounded border p-4">
+        <p className="mb-3 text-sm text-gray-500">
+          Vinculado · {SOURCE_LABEL[source]} id <span className="font-mono">{record.id}</span>
+        </p>
+        <dl className="grid grid-cols-[140px_1fr] gap-y-1 text-sm">
+          {FIELD_LABELS[source].map(([key, label]) => {
+            const v = d[key];
+            return (
+              <FieldRow key={key} label={label} valueKey={key} value={v} />
+            );
+          })}
+        </dl>
+        <form action={unlinkProvider.bind(null, teamId, source)} className="mt-4">
+          <button type="submit" className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">
+            Desvincular {SOURCE_LABEL[source]}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  // Não vinculado: busca no pool da fonte.
+  const idCol = SOURCE_ID_COL[source];
+  const { data: pool } = await supabase
+    .from('teams')
+    .select('id, name, logo_url, country_id')
+    .is('merged_into', null)
+    .not(idCol, 'is', null)
+    .neq('id', teamId);
+  const candidates = (pool ?? [])
+    .filter((c) => (c as { country_id: string }).country_id === countryId)
+    .map((c) => ({ c: c as { id: string; name: string; logo_url: string | null }, sc: score(teamName, (c as { name: string }).name) }))
+    .filter(({ c }) => (q ? norm(c.name).includes(norm(q)) : true))
+    .sort((a, b) => b.sc - a.sc)
+    .slice(0, 20);
+
+  return (
+    <div className="rounded border p-4">
+      <p className="mb-3 text-sm text-gray-500">
+        Sem {SOURCE_LABEL[source]} vinculado. Busque o mesmo clube na lista da fonte e vincule.
+      </p>
+      <form method="get" className="mb-3 flex gap-2">
+        <input type="hidden" name="tab" value={source} />
+        <input
+          name="q"
+          defaultValue={q}
+          placeholder="Buscar por nome…"
+          className="flex-1 rounded border px-2 py-1 text-sm dark:bg-gray-900"
+        />
+        <button type="submit" className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
+          Buscar
+        </button>
+      </form>
+      {!candidates.length && <p className="text-sm text-gray-500">Nenhum candidato.</p>}
+      <div className="flex flex-col gap-1">
+        {candidates.map(({ c, sc }) => (
+          <form
+            key={c.id}
+            action={linkProvider.bind(null, teamId, source)}
+            className="flex items-center gap-2 border-b py-1.5"
+          >
+            <input type="hidden" name="provider_row_id" value={c.id} />
+            {c.logo_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={c.logo_url} alt="" className="h-6 w-6 object-contain" />
+            )}
+            <span className="flex-1 text-sm">{c.name}</span>
+            <span className="text-xs text-gray-400">{Math.round(sc * 100)}%</span>
+            <button type="submit" className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
+              Vincular
+            </button>
+          </form>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FieldRow({ label, valueKey, value }: { label: string; valueKey: string; value: unknown }) {
+  return (
+    <>
+      <dt className="text-gray-500">{label}</dt>
+      <dd>
+        {value == null || value === '' ? (
+          <span className="text-gray-300">—</span>
+        ) : valueKey === 'logo_url' ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={String(value)} alt="" className="h-8 w-8 object-contain" />
+        ) : valueKey === 'website' ? (
+          <a href={String(value)} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+            {String(value)}
+          </a>
+        ) : (
+          String(value)
+        )}
+      </dd>
+    </>
   );
 }

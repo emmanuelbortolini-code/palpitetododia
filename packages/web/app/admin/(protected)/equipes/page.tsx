@@ -6,7 +6,6 @@ import { ImportTeamsForm } from '@/components/admin/import-teams-form';
 export const dynamic = 'force-dynamic';
 
 const SIZES = [10, 20, 50];
-const SOURCE = 'csv';
 
 type SearchParams = {
   country?: string;
@@ -30,13 +29,11 @@ export default async function AdminTeamsPage({
   const fLeague = searchParams.league ?? '';
   const fSeason = searchParams.season ?? '';
 
-  // Vínculos time↔liga↔temporada da fonte CSV (base dos filtros liga/temporada).
+  // Vínculos time↔liga↔temporada (base dos filtros liga/temporada), de todas as fontes.
   const { data: rawLinks } = await supabase
     .from('team_leagues')
-    .select('team_id, league_id, season, league:league_id(name, external_api_source)');
-  const links = (rawLinks ?? []).filter(
-    (l) => (l.league as unknown as { external_api_source: string } | null)?.external_api_source === SOURCE,
-  );
+    .select('team_id, league_id, season, league:league_id(name)');
+  const links = rawLinks ?? [];
 
   const leagueOptions = new Map<string, string>();
   const seasonOptions = new Set<number>();
@@ -65,7 +62,7 @@ export default async function AdminTeamsPage({
   let query = supabase
     .from('teams')
     .select('id, name, logo_url, founded, venue_name')
-    .eq('external_api_source', SOURCE)
+    .is('merged_into', null)
     .order('name', { ascending: true });
   if (fCountry) query = query.eq('country_id', fCountry);
   if (teamIdFilter) query = query.in('id', teamIdFilter.length ? teamIdFilter : ['']);
@@ -92,6 +89,14 @@ export default async function AdminTeamsPage({
 
       <div className="mb-6 rounded border p-4">
         <ImportTeamsForm />
+        <div className="mt-3 flex gap-4 text-sm">
+          <a href="/admin/equipes/export" className="text-blue-600 hover:underline">
+            ↓ Exportar CSV
+          </a>
+          <Link href="/admin/equipes/match" className="text-blue-600 hover:underline">
+            ⇄ Vincular ESPN ↔ API-Football
+          </Link>
+        </div>
       </div>
 
       {/* Filtros (GET — sem JS) */}

@@ -1,21 +1,10 @@
 import { parse } from 'csv-parse/sync';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-// Importa equipes de um CSV no formato de referência
-// (#dados/brazil-serie-a-2026-teams.csv). Fonte 'csv'; service-role.
-
-const SOURCE = 'csv';
-
-function leagueSlug(name: string): string {
-  const base = name
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120);
-  return `${base || 'liga'}-${SOURCE}`;
-}
+// Importa um CSV (no mesmo formato do export, #dados/brazil-serie-a-2026-teams.csv)
+// para ATUALIZAR dados de times em massa. Casa cada linha pelo ID (api_football_id
+// ou espn_id, o mesmo que o export emite). Os campos preenchidos viram `overrides`
+// — passam a ter prioridade e o sync não os sobrescreve. service-role.
 
 // Apelidos no CSV: JSON array de {value, gender} (ou strings). Extrai os valores.
 function parseNicknames(raw: string | undefined): string[] | null {
@@ -33,106 +22,86 @@ function parseNicknames(raw: string | undefined): string[] | null {
   }
 }
 
-function opt(v: string | undefined): string | null {
+function optInt(v: string | undefined): number | null {
   const s = (v ?? '').trim();
-  return s || null;
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
-export type CsvImportResult = { teams: number; links: number };
+// Coluna do CSV -> coluna do banco. Só campos editáveis e seguros (não mexe no
+// slug canônico nem no country_id). Cada um traz como ler o valor.
+type Mapping = { csv: string; col: string; read: (raw: string | undefined) => unknown };
+const MAPPINGS: Mapping[] = [
+  { csv: 'Name (BR)', col: 'name', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Name (EN)', col: 'name_en', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Name (ES)', col: 'name_es', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Slug (EN)', col: 'slug_en', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Slug (ES)', col: 'slug_es', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Founded Year', col: 'founded', read: optInt },
+  { csv: 'Stadium Name', col: 'venue_name', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Stadium Address', col: 'venue_address', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Official Sites', col: 'website', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Nicknames (EN)', col: 'nicknames_en', read: parseNicknames },
+  { csv: 'Nicknames (BR)', col: 'nicknames_pt', read: parseNicknames },
+  { csv: 'Nicknames (ES)', col: 'nicknames_es', read: parseNicknames },
+  { csv: 'Gender (EN)', col: 'gender_en', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Gender (BR)', col: 'gender_br', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Gender (ES)', col: 'gender_es', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Logo Image (WEBP)', col: 'logo_url', read: (v) => (v ?? '').trim() || null },
+];
 
-export async function importTeamsFromCsv(
-  text: string,
-  opts: { leagueName?: string; season?: number },
-): Promise<CsvImportResult> {
+export type CsvImportResult = { updated: number; skipped: number; skippedIds: string[] };
+
+export async function importTeamsFromCsv(text: string): Promise<CsvImportResult> {
   const records = parse(text, {
     columns: true,
     skip_empty_lines: true,
     bom: true,
     trim: true,
   }) as Record<string, string>[];
-  if (!records.length) return { teams: 0, links: 0 };
+  if (!records.length) return { updated: 0, skipped: 0, skippedIds: [] };
 
   const supabase = createAdminClient();
   const now = new Date().toISOString();
 
-  // CSV de referência é do Brasil.
-  const { data: country, error: ce } = await supabase
-    .from('countries')
-    .upsert({ code: 'BR', name: 'Brazil', flag_emoji: '🇧🇷' }, { onConflict: 'code' })
-    .select('id')
-    .single();
-  if (ce) throw new Error(`countries: ${ce.message}`);
-  const countryId = country!.id;
-
-  // Liga (opcional) para vincular temporada → habilita os filtros liga/temporada.
-  let leagueId: string | null = null;
-  if (opts.leagueName) {
-    const slug = leagueSlug(opts.leagueName);
-    const { data: lg, error: le } = await supabase
-      .from('leagues')
-      .upsert(
-        {
-          country_id: countryId,
-          name: opts.leagueName,
-          slug,
-          external_api_id: slug,
-          external_api_source: SOURCE,
-          updated_at: now,
-        },
-        { onConflict: 'external_api_source,external_api_id' },
-      )
-      .select('id')
-      .single();
-    if (le) throw new Error(`leagues: ${le.message}`);
-    leagueId = lg!.id;
-  }
-
-  const rows = records.map((r) => {
-    const id = String(r['ID'] ?? '').trim();
-    const nameBr = opt(r['Name (BR)']) ?? opt(r['Name (EN)']) ?? 'Time';
-    const slugBr = opt(r['Slug (BR)']) ?? nameBr.toLowerCase();
-    return {
-      country_id: countryId,
-      name: nameBr,
-      name_en: opt(r['Name (EN)']),
-      name_es: opt(r['Name (ES)']),
-      slug: `${slugBr}-${SOURCE}-${id}`,
-      slug_en: opt(r['Slug (EN)']),
-      slug_es: opt(r['Slug (ES)']),
-      founded: r['Founded Year'] ? Number(r['Founded Year']) || null : null,
-      venue_name: opt(r['Stadium Name']),
-      venue_address: opt(r['Stadium Address']),
-      website: opt(r['Official Sites']),
-      logo_url: opt(r['Logo Image (WEBP)']),
-      nicknames_pt: parseNicknames(r['Nicknames (BR)']),
-      nicknames_en: parseNicknames(r['Nicknames (EN)']),
-      nicknames_es: parseNicknames(r['Nicknames (ES)']),
-      gender: opt(r['Gender (BR)']) ?? opt(r['Gender (EN)']),
-      external_api_id: id,
-      external_api_source: SOURCE,
-      updated_at: now,
-    };
-  });
-
-  const { data: up, error: te } = await supabase
+  // Mapa de ID (api_football ou espn) -> time existente.
+  const { data: teams, error: te } = await supabase
     .from('teams')
-    .upsert(rows, { onConflict: 'external_api_source,external_api_id' })
-    .select('id, external_api_id');
+    .select('id, api_football_id, espn_id, overrides');
   if (te) throw new Error(`teams: ${te.message}`);
-
-  let links = 0;
-  if (leagueId && opts.season) {
-    const idByApi = new Map(up!.map((t) => [t.external_api_id, t.id]));
-    const linkRows = rows
-      .map((r) => idByApi.get(r.external_api_id))
-      .filter((id): id is string => !!id)
-      .map((team_id) => ({ team_id, league_id: leagueId!, season: opts.season! }));
-    const { error: tle } = await supabase
-      .from('team_leagues')
-      .upsert(linkRows, { onConflict: 'team_id,league_id,season' });
-    if (tle) throw new Error(`team_leagues: ${tle.message}`);
-    links = linkRows.length;
+  const byId = new Map<string, { id: string; overrides: unknown }>();
+  for (const t of teams ?? []) {
+    if (t.api_football_id) byId.set(String(t.api_football_id), t);
+    if (t.espn_id) byId.set(String(t.espn_id), t);
   }
 
-  return { teams: rows.length, links };
+  let updated = 0;
+  const skippedIds: string[] = [];
+  for (const r of records) {
+    const id = String(r['ID'] ?? '').trim();
+    const team = id ? byId.get(id) : undefined;
+    if (!team) {
+      if (id) skippedIds.push(id);
+      continue;
+    }
+
+    const ov = new Set(Array.isArray(team.overrides) ? (team.overrides as string[]) : []);
+    const upd: Record<string, unknown> = { updated_at: now };
+    for (const m of MAPPINGS) {
+      if (!(m.csv in r)) continue; // coluna ausente no arquivo
+      const val = m.read(r[m.csv]);
+      if (val === null || val === '') continue; // célula vazia: não sobrescreve
+      upd[m.col] = val;
+      ov.add(m.col); // editado via planilha -> prioridade manual
+    }
+    if (Object.keys(upd).length === 1) continue; // nada além de updated_at
+
+    upd.overrides = [...ov];
+    const { error } = await supabase.from('teams').update(upd).eq('id', team.id);
+    if (error) throw new Error(`update ${id}: ${error.message}`);
+    updated++;
+  }
+
+  return { updated, skipped: skippedIds.length, skippedIds };
 }

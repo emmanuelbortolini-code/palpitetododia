@@ -78,27 +78,59 @@ export async function syncMatches(): Promise<SyncResult> {
   if (leagueErr) throw new Error(`leagues: ${leagueErr.message}`);
   const leagueId = league!.id;
 
-  // 3. Times (dedupe por id da API).
+  // 3. Times (identidade por api_football_id).
   const teamsByApi = new Map<number, ApiFixture['teams']['home']>();
   for (const f of fixtures) {
     teamsByApi.set(f.teams.home.id, f.teams.home);
     teamsByApi.set(f.teams.away.id, f.teams.away);
   }
-  const teamRows = [...teamsByApi.values()].map((t) => ({
-    country_id: countryId,
-    name: t.name,
-    slug: slugify(t.name, t.id),
-    logo_url: t.logo,
-    external_api_id: String(t.id),
-    external_api_source: SOURCE,
-    updated_at: now,
-  }));
-  const { data: upTeams, error: teamsErr } = await supabase
+  const apiIds = [...teamsByApi.keys()].map(String);
+
+  // Linhas já existentes: atualizamos só os campos NÃO marcados em `overrides`
+  // (o staff pode ter editado à mão) e mapeamos para a linha canônica se foi
+  // vinculada (merged_into) — assim os jogos apontam para o time visível.
+  const { data: existing, error: exErr } = await supabase
     .from('teams')
-    .upsert(teamRows, { onConflict: 'external_api_source,external_api_id' })
-    .select('id, external_api_id');
-  if (teamsErr) throw new Error(`teams: ${teamsErr.message}`);
-  const teamIdByApi = new Map(upTeams!.map((t) => [t.external_api_id, t.id]));
+    .select('id, api_football_id, overrides, merged_into')
+    .in('api_football_id', apiIds);
+  if (exErr) throw new Error(`teams (lookup): ${exErr.message}`);
+  const existingByApi = new Map((existing ?? []).map((t) => [t.api_football_id, t]));
+
+  const teamIdByApi = new Map<string, string>();
+  const toInsert: Record<string, unknown>[] = [];
+  for (const t of teamsByApi.values()) {
+    const apiId = String(t.id);
+    const ex = existingByApi.get(apiId);
+    if (ex) {
+      teamIdByApi.set(apiId, ex.merged_into ?? ex.id);
+      const ov = new Set(Array.isArray(ex.overrides) ? (ex.overrides as string[]) : []);
+      const upd: Record<string, unknown> = { updated_at: now };
+      if (!ov.has('name')) upd.name = t.name;
+      if (!ov.has('logo_url')) upd.logo_url = t.logo;
+      if (Object.keys(upd).length > 1) {
+        const { error } = await supabase.from('teams').update(upd).eq('id', ex.id);
+        if (error) throw new Error(`teams (update): ${error.message}`);
+      }
+    } else {
+      toInsert.push({
+        country_id: countryId,
+        name: t.name,
+        slug: slugify(t.name, t.id),
+        logo_url: t.logo,
+        api_football_id: apiId,
+        api_football_data: { name: t.name, logo_url: t.logo },
+        updated_at: now,
+      });
+    }
+  }
+  if (toInsert.length) {
+    const { data: ins, error } = await supabase
+      .from('teams')
+      .insert(toInsert)
+      .select('id, api_football_id');
+    if (error) throw new Error(`teams (insert): ${error.message}`);
+    for (const r of ins!) teamIdByApi.set(r.api_football_id, r.id);
+  }
 
   // 4. Partidas.
   const matchRows = fixtures.map((f) => {
@@ -130,7 +162,7 @@ export async function syncMatches(): Promise<SyncResult> {
 
   return {
     league: lg.name,
-    teams: teamRows.length,
+    teams: teamsByApi.size,
     matches: matchRows.length,
     season: SEASON,
   };

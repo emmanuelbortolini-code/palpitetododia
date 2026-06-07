@@ -15,6 +15,9 @@ out/
 build/
 dist/
 
+# backups de scripts (dumps de dados — não versionar)
+packages/web/scripts/backups/
+
 # misc
 .DS_Store
 *.pem

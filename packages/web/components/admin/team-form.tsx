@@ -17,7 +17,9 @@ type TeamValues = {
   venue_city: string | null;
   venue_capacity: number | null;
   website: string | null;
-  gender: string | null;
+  gender_en: string | null;
+  gender_br: string | null;
+  gender_es: string | null;
   nicknames_pt: string[] | null;
   nicknames_en: string[] | null;
   nicknames_es: string[] | null;
@@ -73,9 +75,22 @@ export function TeamForm({
           Ano de fundação
           <input name="founded" type="number" defaultValue={v.founded ?? ''} className={field} />
         </label>
+        <span />
+      </div>
+
+      <p className="text-xs text-gray-500">Gênero (ex.: male / female).</p>
+      <div className="grid grid-cols-3 gap-4">
         <label className="flex flex-col gap-1 text-sm">
-          Gênero
-          <input name="gender" defaultValue={v.gender ?? ''} className={field} />
+          Gênero (EN)
+          <input name="gender_en" defaultValue={v.gender_en ?? ''} className={field} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Gênero (BR)
+          <input name="gender_br" defaultValue={v.gender_br ?? ''} className={field} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Gênero (ES)
+          <input name="gender_es" defaultValue={v.gender_es ?? ''} className={field} />
         </label>
       </div>
 

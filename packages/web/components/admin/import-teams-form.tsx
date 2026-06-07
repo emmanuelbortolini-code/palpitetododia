@@ -14,27 +14,13 @@ export function ImportTeamsForm() {
           Arquivo CSV
           <input type="file" name="file" accept=".csv" required className="text-sm" />
         </label>
-        <label className="flex flex-col text-sm">
-          Liga
-          <input
-            name="league_name"
-            defaultValue="Brasileirão Série A"
-            className="rounded border px-2 py-1 dark:bg-gray-900"
-          />
-        </label>
-        <label className="flex flex-col text-sm">
-          Temporada
-          <input
-            name="season"
-            type="number"
-            defaultValue={2026}
-            className="w-24 rounded border px-2 py-1 dark:bg-gray-900"
-          />
-        </label>
         <div className="w-40">
           <SubmitButton>Importar CSV</SubmitButton>
         </div>
       </div>
+      <p className="text-xs text-gray-500">
+        Atualiza times existentes pelo ID (mesmo do export). Campos preenchidos viram edição manual.
+      </p>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       {state.message && <p className="text-sm text-green-700">{state.message}</p>}
     </form>

@@ -10,7 +10,9 @@ ALTER TABLE public.teams
   ADD COLUMN IF NOT EXISTS nicknames_pt jsonb,
   ADD COLUMN IF NOT EXISTS nicknames_en jsonb,
   ADD COLUMN IF NOT EXISTS nicknames_es jsonb,
-  ADD COLUMN IF NOT EXISTS gender varchar(10);
+  ADD COLUMN IF NOT EXISTS gender_en varchar(10),
+  ADD COLUMN IF NOT EXISTS gender_br varchar(10),
+  ADD COLUMN IF NOT EXISTS gender_es varchar(10);
 
 -- Fonte 'csv' para times/ligas importados de planilha (além de api_football/espn).
 ALTER TABLE public.teams DROP CONSTRAINT IF EXISTS teams_external_api_source_check;
