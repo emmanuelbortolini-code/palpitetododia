@@ -2,11 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireStaff } from '@/lib/auth/staff';
-import { syncMatches } from '@/lib/sync/matches';
+import { syncEspnFixtures } from '@/lib/sync/fixtures';
 
 export type ActionState = { error?: string; message?: string };
 
-/** Dispara o sync manualmente a partir do /admin/jogos. Somente admin. */
+/** Dispara o sync de jogos (ESPN, temporada atual) a partir do /admin/jogos. */
 export async function syncNow(
   _prev: ActionState,
   _formData: FormData,
@@ -14,13 +14,10 @@ export async function syncNow(
   await requireStaff(['admin']);
 
   try {
-    const r = await syncMatches();
+    const r = await syncEspnFixtures();
     revalidatePath('/admin/jogos');
-    if (!r.league) {
-      return { message: `Nenhuma partida retornada para a temporada ${r.season}.` };
-    }
     return {
-      message: `${r.league} ${r.season}: ${r.teams} times, ${r.matches} partidas sincronizadas.`,
+      message: `${r.matches} jogos sincronizados de ${r.leagues} ligas da ESPN${r.skipped ? ` (${r.skipped} pulados — time não cadastrado)` : ''}.`,
     };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Erro ao sincronizar.' };

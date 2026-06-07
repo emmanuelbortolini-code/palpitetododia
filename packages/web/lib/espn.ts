@@ -50,3 +50,67 @@ export async function fetchEspnLeagueTeams(slug: string): Promise<EspnLeagueData
     teams,
   };
 }
+
+// ── Jogos (scoreboard) ──────────────────────────────────────────────────────
+
+export type EspnEvent = {
+  id: string;
+  date: string; // ISO com horário (UTC)
+  state: string; // 'pre' | 'in' | 'post'
+  statusName: string; // ex.: STATUS_FULL_TIME, STATUS_POSTPONED
+  completed: boolean;
+  homeId: string | null;
+  awayId: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+};
+
+const ymd = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '');
+
+function parseEvent(e: any): EspnEvent | null {
+  const c = e?.competitions?.[0];
+  if (!c) return null;
+  const comps = c.competitors ?? [];
+  const h = comps.find((x: any) => x.homeAway === 'home');
+  const a = comps.find((x: any) => x.homeAway === 'away');
+  const num = (v: any) => (v != null && v !== '' && !Number.isNaN(Number(v)) ? Number(v) : null);
+  const st = e.status?.type ?? {};
+  return {
+    id: String(e.id),
+    date: e.date,
+    state: st.state ?? 'pre',
+    statusName: st.name ?? '',
+    completed: !!st.completed,
+    homeId: h ? String(h.team.id) : null,
+    awayId: a ? String(a.team.id) : null,
+    homeScore: h ? num(h.score) : null,
+    awayScore: a ? num(a.score) : null,
+  };
+}
+
+/**
+ * Todos os jogos de uma liga ESPN num ano, via janelas de data. O scoreboard
+ * limita a 100 eventos por resposta, então fazemos split recursivo do intervalo.
+ */
+export async function fetchEspnFixtures(slug: string, year: number): Promise<EspnEvent[]> {
+  const out = new Map<string, EspnEvent>();
+  async function range(start: Date, end: Date): Promise<void> {
+    const res = await fetch(`${ESPN_BASE}/${slug}/scoreboard?dates=${ymd(start)}-${ymd(end)}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`ESPN scoreboard ${slug}: HTTP ${res.status}`);
+    const json = await res.json();
+    const evs: any[] = json?.events ?? [];
+    // Teto de 100: se bateu e a janela ainda é maior que ~2 dias, divide.
+    if (evs.length >= 100 && end.getTime() - start.getTime() > 2 * 86400000) {
+      const mid = new Date((start.getTime() + end.getTime()) / 2);
+      await range(start, mid);
+      await range(new Date(mid.getTime() + 86400000), end);
+      return;
+    }
+    for (const e of evs) {
+      const p = parseEvent(e);
+      if (p) out.set(p.id, p);
+    }
+  }
+  await range(new Date(Date.UTC(year, 0, 1)), new Date(Date.UTC(year, 11, 31)));
+  return [...out.values()];
+}

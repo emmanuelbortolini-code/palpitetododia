@@ -1,9 +1,9 @@
-import { syncMatches } from '@/lib/sync/matches';
+import { syncEspnFixtures } from '@/lib/sync/fixtures';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Cron diário de sincronização de partidas (configurar no Vercel via vercel.json).
+ * Cron diário de sincronização de jogos (ESPN, ligas ativas, temporada atual).
  * Protegido pelo header Authorization: Bearer <CRON_SECRET>.
  * O Vercel Cron envia esse header automaticamente.
  */
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await syncMatches();
+    const result = await syncEspnFixtures();
     return Response.json({ ok: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro desconhecido';

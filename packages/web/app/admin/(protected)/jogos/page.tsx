@@ -32,8 +32,8 @@ export default async function AdminMatchesPage() {
     <main className="mx-auto max-w-2xl p-6">
       <h1 className="mb-2 text-2xl font-bold">Jogos</h1>
       <p className="mb-4 text-sm text-gray-500">
-        {count ?? 0} partidas no banco. O sync puxa a liga/temporada configuradas em
-        env (API_FOOTBALL_LEAGUE_ID / API_FOOTBALL_SEASON).
+        {count ?? 0} partidas no banco. O sync puxa os jogos da temporada atual das
+        ligas ativas via API ESPN.
       </p>
 
       <div className="mb-6 rounded border p-4">
