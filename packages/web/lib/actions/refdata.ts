@@ -57,6 +57,37 @@ export async function updateLeague(
   redirect('/admin/ligas');
 }
 
+export type LeagueSource = 'espn' | 'football';
+const LSRC: Record<LeagueSource, string> = { espn: 'espn', football: 'api_football' };
+
+// Vincula uma liga de fonte (linha do pool) a esta liga canônica (vira alias).
+export async function linkProviderLeague(canonicalId: string, source: LeagueSource, formData: FormData) {
+  await requireStaff(['admin']);
+  const rowId = String(formData.get('provider_row_id') ?? '').trim();
+  if (!rowId || rowId === canonicalId) return;
+  const supabase = createAdminClient();
+  await supabase
+    .from('leagues')
+    .update({ merged_into: canonicalId, updated_at: new Date().toISOString() })
+    .eq('id', rowId);
+  revalidatePath('/admin/ligas');
+  revalidatePath('/admin/equipes');
+  redirect(`/admin/ligas/${canonicalId}/editar?tab=${source}`);
+}
+
+// Desvincula a fonte (alias) desta liga: volta ao pool.
+export async function unlinkProviderLeague(canonicalId: string, source: LeagueSource) {
+  await requireStaff(['admin']);
+  const supabase = createAdminClient();
+  await supabase
+    .from('leagues')
+    .update({ merged_into: null, updated_at: new Date().toISOString() })
+    .eq('merged_into', canonicalId)
+    .eq('external_api_source', LSRC[source]);
+  revalidatePath('/admin/ligas');
+  redirect(`/admin/ligas/${canonicalId}/editar?tab=${source}`);
+}
+
 // Liga/descura uma liga (controla o que aparece nos filtros de Equipes e na lista).
 export async function setLeagueCurated(id: string, curated: boolean) {
   await requireStaff(['admin']);
