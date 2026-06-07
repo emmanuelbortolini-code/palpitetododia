@@ -5,8 +5,35 @@ import { revalidatePath } from 'next/cache';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { importTeamsFromCsv } from '@/lib/sync/csv-teams';
+import { syncEspnActiveTeams, syncFootballMissingTeams } from '@/lib/sync/team-providers';
 
 export type ActionState = { error?: string; message?: string };
+
+export async function syncEspnTeamsAction(_prev: ActionState, _formData: FormData): Promise<ActionState> {
+  await requireStaff(['admin']);
+  try {
+    const r = await syncEspnActiveTeams();
+    revalidatePath('/admin/equipes');
+    return {
+      message: `${r.leagues} ligas: ${r.created} times novos, ${r.updated} atualizados, ${r.links} vínculos${r.skipped ? `, ${r.skipped} ligas sem ESPN` : ''}.`,
+    };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Erro ao sincronizar via ESPN.' };
+  }
+}
+
+export async function syncFootballTeamsAction(_prev: ActionState, _formData: FormData): Promise<ActionState> {
+  await requireStaff(['admin']);
+  try {
+    const r = await syncFootballMissingTeams();
+    revalidatePath('/admin/equipes');
+    return {
+      message: `${r.matched} times completados com dados do Football${r.skipped ? `, ${r.skipped} sem correspondência` : ''}${r.remaining ? `. Faltam ${r.remaining} — clique de novo.` : '.'}`,
+    };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Erro ao sincronizar via Football.' };
+  }
+}
 
 export async function importTeamsCsvAction(
   _prev: ActionState,

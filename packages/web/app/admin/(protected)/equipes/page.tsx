@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ImportTeamsForm } from '@/components/admin/import-teams-form';
+import { SyncTeamsButtons } from '@/components/admin/sync-teams-buttons';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,6 +90,10 @@ export default async function AdminTeamsPage({
       <p className="mb-4 text-sm text-gray-500">
         Importe um CSV de equipes (nome, fundação, estádio, endereço, site, apelidos…).
       </p>
+
+      <div className="mb-6 rounded border p-4">
+        <SyncTeamsButtons />
+      </div>
 
       <div className="mb-6 rounded border p-4">
         <ImportTeamsForm />
