@@ -7,7 +7,7 @@ import { updateTeam, linkProvider, unlinkProvider, type Source } from '@/lib/act
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'atual' | 'espn' | 'football';
+type Tab = 'atual' | 'temporada' | 'espn' | 'football';
 type SearchParams = { tab?: string; q?: string };
 
 const FORM_COLS =
@@ -69,7 +69,9 @@ export default async function EditarEquipePage({
   if (!team) notFound();
 
   const t = team as Record<string, unknown>;
-  const tab: Tab = searchParams.tab === 'espn' || searchParams.tab === 'football' ? searchParams.tab : 'atual';
+  const tab: Tab = ['temporada', 'espn', 'football'].includes(searchParams.tab ?? '')
+    ? (searchParams.tab as Tab)
+    : 'atual';
 
   // Registro de cada fonte: a própria linha (se tem o id) ou um alias.
   const providerOf = (src: Source) => {
@@ -104,6 +106,7 @@ export default async function EditarEquipePage({
 
       <div className="mb-5 flex gap-1 border-b">
         <TabLink to="atual">Dados Atuais</TabLink>
+        <TabLink to="temporada">Temporada</TabLink>
         <TabLink to="espn">Dados ESPN</TabLink>
         <TabLink to="football">Dados Football API</TabLink>
       </div>
@@ -116,7 +119,9 @@ export default async function EditarEquipePage({
         />
       )}
 
-      {tab !== 'atual' && (
+      {tab === 'temporada' && <SeasonTab teamId={params.id} supabase={supabase} />}
+
+      {(tab === 'espn' || tab === 'football') && (
         <ProviderTab
           teamId={params.id}
           teamName={team.name as string}
@@ -248,5 +253,50 @@ function FieldRow({ label, valueKey, value }: { label: string; valueKey: string;
         )}
       </dd>
     </>
+  );
+}
+
+async function SeasonTab({
+  teamId,
+  supabase,
+}: {
+  teamId: string;
+  supabase: ReturnType<typeof createAdminClient>;
+}) {
+  const { data } = await supabase
+    .from('team_leagues')
+    .select('season, league:league_id(name)')
+    .eq('team_id', teamId)
+    .order('season', { ascending: false });
+  const rows = (data ?? [])
+    .map((r) => ({
+      season: r.season as number,
+      league: (r.league as unknown as { name: string } | null)?.name ?? '—',
+    }))
+    .sort((a, b) => b.season - a.season || a.league.localeCompare(b.league));
+
+  return (
+    <div className="rounded border p-4">
+      <p className="mb-3 text-sm text-gray-500">Ligas e temporadas em que este time competiu.</p>
+      {!rows.length && <p className="text-sm text-gray-500">Sem temporadas vinculadas.</p>}
+      {rows.length > 0 && (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-gray-500">
+              <th className="py-1 font-medium">Liga</th>
+              <th className="py-1 font-medium">Ano</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-t">
+                <td className="py-1.5">{r.league}</td>
+                <td className="py-1.5 text-gray-500">{r.season}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
