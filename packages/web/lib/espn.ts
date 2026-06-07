@@ -51,6 +51,33 @@ export async function fetchEspnLeagueTeams(slug: string): Promise<EspnLeagueData
   };
 }
 
+export type EspnStanding = {
+  rank: number | null;
+  teamId: string;
+  name: string;
+  logo: string | null;
+  gp: string; w: string; d: string; l: string; gf: string; ga: string; gd: string; points: string;
+};
+
+/** Classificação (tabela) de um campeonato na ESPN. */
+export async function fetchEspnStandings(slug: string): Promise<EspnStanding[]> {
+  const res = await fetch(`https://site.api.espn.com/apis/v2/sports/soccer/${slug}/standings`, { cache: 'no-store' });
+  if (!res.ok) return [];
+  const j: any = await res.json();
+  const entries: any[] = j?.children?.[0]?.standings?.entries ?? j?.standings?.entries ?? [];
+  const val = (e: any, abbr: string) => e.stats?.find((x: any) => x.abbreviation === abbr)?.displayValue ?? '';
+  return entries
+    .map((e) => ({
+      rank: Number(val(e, 'R')) || null,
+      teamId: String(e.team?.id ?? ''),
+      name: e.team?.displayName ?? e.team?.name ?? '',
+      logo: e.team?.logos?.[0]?.href ?? null,
+      gp: val(e, 'GP'), w: val(e, 'W'), d: val(e, 'D'), l: val(e, 'L'),
+      gf: val(e, 'F'), ga: val(e, 'A'), gd: val(e, 'GD'), points: val(e, 'P'),
+    }))
+    .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+}
+
 // ── Jogos (scoreboard) ──────────────────────────────────────────────────────
 
 export type EspnEvent = {

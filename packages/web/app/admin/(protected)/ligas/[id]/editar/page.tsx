@@ -192,9 +192,12 @@ function FootballView({ d }: { d: Record<string, unknown> }) {
   );
 }
 
+type Standing = { rank: number | null; name: string; logo: string | null; gp: string; w: string; d: string; l: string; gf: string; ga: string; gd: string; points: string };
+
 function EspnView({ d }: { d: Record<string, unknown> }) {
   const season = d.season as { year?: number } | null;
   const teams = (d.teams as { id: string; name: string; logo: string | null }[] | null) ?? [];
+  const standings = (d.standings as Standing[] | null) ?? [];
   return (
     <div className="text-sm">
       <dl className="grid grid-cols-[120px_1fr] gap-y-1">
@@ -208,7 +211,52 @@ function EspnView({ d }: { d: Record<string, unknown> }) {
         </Row>
         <Row label="Temporada atual">{season?.year ?? '—'}</Row>
       </dl>
-      <p className="mb-2 mt-3 text-gray-500">{teams.length} times participantes</p>
+
+      {!!standings.length && (
+        <>
+          <p className="mb-1 mt-4 font-medium">Classificação ({season?.year ?? ''})</p>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-gray-500">
+                <th className="py-1 pr-1">#</th>
+                <th className="py-1">Time</th>
+                <th className="py-1 text-center">P</th>
+                <th className="py-1 text-center">J</th>
+                <th className="py-1 text-center">V</th>
+                <th className="py-1 text-center">E</th>
+                <th className="py-1 text-center">D</th>
+                <th className="py-1 text-center">GP</th>
+                <th className="py-1 text-center">GC</th>
+                <th className="py-1 text-center">SG</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.map((t, i) => (
+                <tr key={i} className="border-t">
+                  <td className="py-1 pr-1 text-gray-500">{t.rank ?? i + 1}</td>
+                  <td className="flex items-center gap-1 py-1">
+                    {t.logo && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={t.logo} alt="" className="h-4 w-4 object-contain" />
+                    )}
+                    {t.name}
+                  </td>
+                  <td className="py-1 text-center font-medium">{t.points}</td>
+                  <td className="py-1 text-center">{t.gp}</td>
+                  <td className="py-1 text-center">{t.w}</td>
+                  <td className="py-1 text-center">{t.d}</td>
+                  <td className="py-1 text-center">{t.l}</td>
+                  <td className="py-1 text-center">{t.gf}</td>
+                  <td className="py-1 text-center">{t.ga}</td>
+                  <td className="py-1 text-center">{t.gd}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      <p className="mb-2 mt-4 text-gray-500">{teams.length} times participantes</p>
       <div className="grid grid-cols-2 gap-1">
         {teams.map((t) => (
           <div key={t.id} className="flex items-center gap-2">

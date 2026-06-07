@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { ESPN_BRAZIL_LEAGUES, fetchEspnLeagueTeams } from '@/lib/espn';
+import { ESPN_BRAZIL_LEAGUES, fetchEspnLeagueTeams, fetchEspnStandings } from '@/lib/espn';
 
 // Sync de dados de referência (ligas e times) via API pública da ESPN.
 // Fonte 'espn'; escreve com a service_role (ignora RLS).
@@ -95,12 +95,14 @@ export async function syncEspnActiveLeagues(): Promise<EspnSyncResult> {
     const alias = espnAliasByCanon.get(c.id);
     if (!alias) { skipped++; continue; } // sem contraparte ESPN (ex.: Série D)
     const { league, teams: roster } = await fetchEspnLeagueTeams(alias.external_api_id);
+    const standings = await fetchEspnStandings(alias.external_api_id);
     const data = {
       name: league.name,
       slug: league.slug,
       logo: league.logo,
       season: league.season,
       teams: roster.map((t) => ({ id: t.id, name: t.name, logo: t.logo })),
+      standings,
     };
     await supabase.from('leagues').update({ espn_data: data, updated_at: now }).eq('id', alias.id);
     leaguesSynced++;

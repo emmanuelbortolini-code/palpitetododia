@@ -73,12 +73,31 @@ async function main() {
     const ej = await r.json();
     const lg = ej?.sports?.[0]?.leagues?.[0];
     if (!lg) { console.log(`  ESPN ${l.name}: sem dados`); continue; }
+    // Classificação (tabela).
+    let standings = [];
+    try {
+      const sr = await fetch(`https://site.api.espn.com/apis/v2/sports/soccer/${l.external_api_id}/standings`, { cache: 'no-store' });
+      if (sr.ok) {
+        const sj = await sr.json();
+        const entries = sj?.children?.[0]?.standings?.entries ?? sj?.standings?.entries ?? [];
+        const val = (e, abbr) => (e.stats || []).find((x) => x.abbreviation === abbr)?.displayValue ?? '';
+        standings = entries
+          .map((e) => ({
+            rank: Number(val(e, 'R')) || null, teamId: String(e.team?.id ?? ''),
+            name: e.team?.displayName ?? '', logo: e.team?.logos?.[0]?.href ?? null,
+            gp: val(e, 'GP'), w: val(e, 'W'), d: val(e, 'D'), l: val(e, 'L'),
+            gf: val(e, 'F'), ga: val(e, 'A'), gd: val(e, 'GD'), points: val(e, 'P'),
+          }))
+          .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+      }
+    } catch {}
     const data = {
       name: lg.name, slug: lg.slug, logo: lg.logos?.[0]?.href ?? null,
       season: lg.season ? { year: lg.season.year, displayName: lg.season.displayName } : null,
       teams: (lg.teams || []).map((t) => ({ id: String(t.team.id), name: t.team.displayName ?? t.team.name, logo: t.team.logos?.[0]?.href ?? null })),
+      standings,
     };
-    console.log(`  ESPN ${l.name}: temporada ${data.season?.year ?? '?'}, ${data.teams.length} times`);
+    console.log(`  ESPN ${l.name}: temporada ${data.season?.year ?? '?'}, ${data.teams.length} times, ${standings.length} na tabela`);
     if (APPLY) { await s.from('leagues').update({ espn_data: data }).eq('id', l.id); espnDone++; }
   }
 
