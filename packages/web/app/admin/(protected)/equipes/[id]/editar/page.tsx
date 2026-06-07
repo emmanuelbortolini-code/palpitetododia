@@ -31,6 +31,8 @@ const FIELD_LABELS: Record<Source, [string, string][]> = {
     ['venue_address', 'Endereço'],
     ['venue_city', 'Cidade'],
     ['venue_capacity', 'Capacidade'],
+    ['venue_surface', 'Superfície'],
+    ['venue_image', 'Imagem do estádio'],
     ['website', 'Site'],
   ],
 };
@@ -234,9 +236,9 @@ function FieldRow({ label, valueKey, value }: { label: string; valueKey: string;
       <dd>
         {value == null || value === '' ? (
           <span className="text-gray-300">—</span>
-        ) : valueKey === 'logo_url' ? (
+        ) : valueKey === 'logo_url' || valueKey === 'venue_image' ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={String(value)} alt="" className="h-8 w-8 object-contain" />
+          <img src={String(value)} alt="" className={valueKey === 'venue_image' ? 'h-16 rounded object-cover' : 'h-8 w-8 object-contain'} />
         ) : valueKey === 'website' ? (
           <a href={String(value)} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
             {String(value)}
