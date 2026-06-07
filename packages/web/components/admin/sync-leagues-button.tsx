@@ -9,7 +9,7 @@ export function SyncLeaguesButton() {
 
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      <SubmitButton>Sincronizar ligas do Brasil</SubmitButton>
+      <SubmitButton>Sincronizar Ligas da API ESPN</SubmitButton>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       {state.message && <p className="text-sm text-green-700">{state.message}</p>}
     </form>

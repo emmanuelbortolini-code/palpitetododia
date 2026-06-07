@@ -5,8 +5,10 @@ const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 
 export type EspnTeam = { id: string; name: string; logo: string | null };
 
+export type EspnSeason = { year: number; displayName: string } | null;
+
 export type EspnLeagueData = {
-  league: { id: string; name: string; slug: string; logo: string | null };
+  league: { id: string; name: string; slug: string; logo: string | null; season: EspnSeason };
   teams: EspnTeam[];
 };
 
@@ -43,6 +45,7 @@ export async function fetchEspnLeagueTeams(slug: string): Promise<EspnLeagueData
       name: lg.name,
       slug,
       logo: lg.logos?.[0]?.href ?? null,
+      season: lg.season ? { year: lg.season.year, displayName: lg.season.displayName } : null,
     },
     teams,
   };

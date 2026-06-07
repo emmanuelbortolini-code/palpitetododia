@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { syncBrazilLeagues } from '@/lib/sync/refdata';
+import { syncEspnActiveLeagues } from '@/lib/sync/refdata';
 import { importLeaguesFromCsv } from '@/lib/sync/csv-leagues';
 
 export type ActionState = { error?: string; message?: string };
@@ -124,10 +124,11 @@ export async function syncLeaguesAction(
 ): Promise<ActionState> {
   await requireStaff(['admin']);
   try {
-    const r = await syncBrazilLeagues();
+    const r = await syncEspnActiveLeagues();
     revalidatePath('/admin/ligas');
     revalidatePath('/admin/equipes');
-    return { message: `${r.count} ligas do Brasil sincronizadas.` };
+    const skip = r.skipped ? `, ${r.skipped} sem ESPN ignoradas` : '';
+    return { message: `${r.leagues} ligas sincronizadas da ESPN (${r.teamLinks} vínculos de times)${skip}.` };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Erro ao sincronizar ligas.' };
   }
