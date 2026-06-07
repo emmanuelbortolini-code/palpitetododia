@@ -10,14 +10,10 @@ const FINISHED = ['finished', 'cancelled'];
 const UPCOMING = ['scheduled', 'live', 'postponed'];
 
 const STATUS_LABEL: Record<string, string> = {
-  scheduled: 'Agendada',
-  live: 'Ao vivo',
-  finished: 'Encerrada',
-  postponed: 'Adiada',
-  cancelled: 'Cancelada',
+  scheduled: 'Agendada', live: 'Ao vivo', finished: 'Encerrada', postponed: 'Adiada', cancelled: 'Cancelada',
 };
 
-type SearchParams = { tab?: string; page?: string; size?: string };
+type SearchParams = { tab?: string; q?: string; league?: string; page?: string; size?: string };
 
 export default async function AdminMatchesPage({
   searchParams,
@@ -28,33 +24,49 @@ export default async function AdminMatchesPage({
   const supabase = createAdminClient();
 
   const tab = searchParams.tab === 'encerrados' ? 'encerrados' : 'proximos';
+  const fQ = (searchParams.q ?? '').trim();
+  const fLeague = searchParams.league ?? '';
   const size = SIZES.includes(Number(searchParams.size)) ? Number(searchParams.size) : 50;
   const page = Math.max(1, Number(searchParams.page) || 1);
   const statuses = tab === 'encerrados' ? FINISHED : UPCOMING;
   const asc = tab === 'proximos';
 
-  // Só jogos de ligas ativas.
-  const { data: cur } = await supabase.from('leagues').select('id').eq('curated', true);
+  // Ligas ativas (opções do filtro + escopo padrão).
+  const { data: cur } = await supabase.from('leagues').select('id, name').eq('curated', true).order('name');
   const curatedIds = (cur ?? []).map((l) => l.id);
+  const leagueIds = fLeague && curatedIds.includes(fLeague) ? [fLeague] : curatedIds;
 
-  const base = () =>
-    supabase
+  // Busca por time (mandante OU visitante): resolve ids por nome.
+  let teamIds: string[] | null = null;
+  if (fQ) {
+    const { data: ts } = await supabase.from('teams').select('id').ilike('name', `%${fQ}%`).limit(300);
+    teamIds = (ts ?? []).map((t) => t.id);
+  }
+
+  const buildQuery = () => {
+    let q = supabase
       .from('matches')
       .select('id, scheduled_at, status, home_score, away_score, home:home_team_id(name), away:away_team_id(name)', { count: 'exact' })
-      .in('league_id', curatedIds.length ? curatedIds : ['00000000-0000-0000-0000-000000000000'])
+      .in('league_id', leagueIds.length ? leagueIds : ['00000000-0000-0000-0000-000000000000'])
       .in('status', statuses);
+    if (teamIds) {
+      const ids = teamIds.length ? teamIds : ['00000000-0000-0000-0000-000000000000'];
+      q = q.or(`home_team_id.in.(${ids.join(',')}),away_team_id.in.(${ids.join(',')})`);
+    }
+    return q;
+  };
 
-  const { count } = await base().range(0, 0);
+  const { count } = await buildQuery().range(0, 0);
   const total = count ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / size));
   const current = Math.min(page, pageCount);
-  const { data: matches } = await base()
+  const { data: matches } = await buildQuery()
     .order('scheduled_at', { ascending: asc })
     .range((current - 1) * size, current * size - 1);
 
   const qs = (over: Partial<SearchParams>) => {
     const p = new URLSearchParams();
-    const merged = { tab, size: String(size), ...over };
+    const merged = { tab, q: fQ, league: fLeague, size: String(size), ...over };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, String(v));
     return `?${p.toString()}`;
   };
@@ -84,6 +96,35 @@ export default async function AdminMatchesPage({
           Jogos Encerrados
         </Link>
       </div>
+
+      {/* Filtros (GET — sem JS). tab preservado. */}
+      <form method="get" className="mb-4 flex flex-wrap items-end gap-2">
+        <input type="hidden" name="tab" value={tab} />
+        <label className="flex flex-col text-sm">
+          Time
+          <input name="q" defaultValue={fQ} placeholder="Buscar time…" className="rounded border px-2 py-1 dark:bg-gray-900" />
+        </label>
+        <label className="flex flex-col text-sm">
+          Liga
+          <select name="league" defaultValue={fLeague} className="rounded border px-2 py-1 dark:bg-gray-900">
+            <option value="">Todas</option>
+            {cur?.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col text-sm">
+          Por página
+          <select name="size" defaultValue={String(size)} className="rounded border px-2 py-1 dark:bg-gray-900">
+            {SIZES.map((sz) => (
+              <option key={sz} value={sz}>{sz}</option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+          Filtrar
+        </button>
+      </form>
 
       <p className="mb-2 text-sm text-gray-500">{total} jogos</p>
       {!matches?.length && <p className="text-gray-500">Nenhum jogo.</p>}
