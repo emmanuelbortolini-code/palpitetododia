@@ -6,7 +6,15 @@ import { setLeagueCurated } from '@/lib/actions/refdata';
 
 export const dynamic = 'force-dynamic';
 
-type SearchParams = { q?: string };
+const SIZES = [10, 20, 50];
+
+type SearchParams = {
+  q?: string;
+  country?: string;
+  status?: string;
+  page?: string;
+  size?: string;
+};
 
 export default async function AdminLeaguesPage({
   searchParams,
@@ -17,16 +25,40 @@ export default async function AdminLeaguesPage({
   const supabase = createAdminClient();
 
   const q = (searchParams.q ?? '').trim();
+  const fCountry = searchParams.country ?? '';
+  const fStatus = searchParams.status ?? ''; // '', 'ativas', 'inativas'
+  const size = SIZES.includes(Number(searchParams.size)) ? Number(searchParams.size) : 20;
+  const page = Math.max(1, Number(searchParams.page) || 1);
+
+  const { data: countries } = await supabase
+    .from('countries')
+    .select('id, name')
+    .order('name', { ascending: true });
+
   let query = supabase
     .from('leagues')
-    .select('id, name, curated')
+    .select('id, name, curated, country_id')
     .is('merged_into', null) // só canônicas (ESPN duplicadas ficam de fora)
     .order('curated', { ascending: false })
     .order('name', { ascending: true });
   if (q) query = query.ilike('name', `%${q}%`);
-  const { data: leagues } = await query;
+  if (fCountry) query = query.eq('country_id', fCountry);
+  if (fStatus === 'ativas') query = query.eq('curated', true);
+  if (fStatus === 'inativas') query = query.eq('curated', false);
 
-  const curatedCount = (leagues ?? []).filter((l) => l.curated).length;
+  const { data: all } = await query;
+  const total = all?.length ?? 0;
+  const curatedCount = (all ?? []).filter((l) => l.curated).length;
+  const pageCount = Math.max(1, Math.ceil(total / size));
+  const current = Math.min(page, pageCount);
+  const leagues = (all ?? []).slice((current - 1) * size, current * size);
+
+  const qs = (over: Partial<SearchParams>) => {
+    const p = new URLSearchParams();
+    const merged = { q, country: fCountry, status: fStatus, size: String(size), ...over };
+    for (const [k, val] of Object.entries(merged)) if (val) p.set(k, String(val));
+    return `?${p.toString()}`;
+  };
 
   return (
     <main className="mx-auto max-w-2xl p-6">
@@ -39,24 +71,57 @@ export default async function AdminLeaguesPage({
         <SyncLeaguesButton />
       </div>
 
-      <form method="get" className="mb-3 flex gap-2">
-        <input
-          name="q"
-          defaultValue={q}
-          placeholder="Buscar liga…"
-          className="flex-1 rounded border px-2 py-1 text-sm dark:bg-gray-900"
-        />
-        <button type="submit" className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
-          Buscar
+      {/* Filtros (GET — sem JS) */}
+      <form method="get" className="mb-4 flex flex-wrap items-end gap-2">
+        <label className="flex flex-col text-sm">
+          Nome
+          <input
+            name="q"
+            defaultValue={q}
+            placeholder="Buscar liga…"
+            className="rounded border px-2 py-1 dark:bg-gray-900"
+          />
+        </label>
+        <label className="flex flex-col text-sm">
+          País
+          <select name="country" defaultValue={fCountry} className="rounded border px-2 py-1 dark:bg-gray-900">
+            <option value="">Todos</option>
+            {countries?.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col text-sm">
+          Status
+          <select name="status" defaultValue={fStatus} className="rounded border px-2 py-1 dark:bg-gray-900">
+            <option value="">Todas</option>
+            <option value="ativas">Ativas</option>
+            <option value="inativas">Inativas</option>
+          </select>
+        </label>
+        <label className="flex flex-col text-sm">
+          Por página
+          <select name="size" defaultValue={String(size)} className="rounded border px-2 py-1 dark:bg-gray-900">
+            {SIZES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+          Filtrar
         </button>
       </form>
 
       <h2 className="mb-2 text-sm font-medium text-gray-500">
-        {curatedCount} ativas {q ? `· ${leagues?.length ?? 0} no filtro` : `de ${leagues?.length ?? 0}`}
+        {curatedCount} ativas de {total} no filtro
       </h2>
-      {!leagues?.length && <p className="text-gray-500">Nenhuma liga.</p>}
+      {!leagues.length && <p className="text-gray-500">Nenhuma liga.</p>}
       <ul className="flex flex-col gap-1">
-        {leagues?.map((l) => (
+        {leagues.map((l) => (
           <li key={l.id} className="flex items-center justify-between rounded border p-2.5">
             <span className={l.curated ? 'font-medium' : 'text-gray-500'}>{l.name}</span>
             <div className="flex items-center gap-3">
@@ -79,6 +144,28 @@ export default async function AdminLeaguesPage({
           </li>
         ))}
       </ul>
+
+      {pageCount > 1 && (
+        <div className="mt-4 flex items-center justify-between text-sm">
+          {current > 1 ? (
+            <Link href={qs({ page: String(current - 1) })} className="text-blue-600 hover:underline">
+              ← Anterior
+            </Link>
+          ) : (
+            <span className="text-gray-300">← Anterior</span>
+          )}
+          <span className="text-gray-500">
+            Página {current} de {pageCount}
+          </span>
+          {current < pageCount ? (
+            <Link href={qs({ page: String(current + 1) })} className="text-blue-600 hover:underline">
+              Próxima →
+            </Link>
+          ) : (
+            <span className="text-gray-300">Próxima →</span>
+          )}
+        </div>
+      )}
     </main>
   );
 }
