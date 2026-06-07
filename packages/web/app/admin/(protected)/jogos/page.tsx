@@ -1,8 +1,13 @@
+import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStaff } from '@/lib/auth/staff';
 import { SyncButton } from '@/components/admin/sync-button';
 
 export const dynamic = 'force-dynamic';
+
+const SIZES = [20, 50, 100];
+const FINISHED = ['finished', 'cancelled'];
+const UPCOMING = ['scheduled', 'live', 'postponed'];
 
 const STATUS_LABEL: Record<string, string> = {
   scheduled: 'Agendada',
@@ -12,57 +17,115 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: 'Cancelada',
 };
 
-export default async function AdminMatchesPage() {
+type SearchParams = { tab?: string; page?: string; size?: string };
+
+export default async function AdminMatchesPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   await requireStaff(['admin']);
-
   const supabase = createAdminClient();
-  const { count } = await supabase
-    .from('matches')
-    .select('id', { count: 'exact', head: true });
 
-  const { data: matches } = await supabase
-    .from('matches')
-    .select(
-      'id, scheduled_at, status, home_score, away_score, home:home_team_id(name), away:away_team_id(name)',
-    )
-    .order('scheduled_at', { ascending: false })
-    .limit(20);
+  const tab = searchParams.tab === 'encerrados' ? 'encerrados' : 'proximos';
+  const size = SIZES.includes(Number(searchParams.size)) ? Number(searchParams.size) : 50;
+  const page = Math.max(1, Number(searchParams.page) || 1);
+  const statuses = tab === 'encerrados' ? FINISHED : UPCOMING;
+  const asc = tab === 'proximos';
+
+  // Só jogos de ligas ativas.
+  const { data: cur } = await supabase.from('leagues').select('id').eq('curated', true);
+  const curatedIds = (cur ?? []).map((l) => l.id);
+
+  const base = () =>
+    supabase
+      .from('matches')
+      .select('id, scheduled_at, status, home_score, away_score, home:home_team_id(name), away:away_team_id(name)', { count: 'exact' })
+      .in('league_id', curatedIds.length ? curatedIds : ['00000000-0000-0000-0000-000000000000'])
+      .in('status', statuses);
+
+  const { count } = await base().range(0, 0);
+  const total = count ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / size));
+  const current = Math.min(page, pageCount);
+  const { data: matches } = await base()
+    .order('scheduled_at', { ascending: asc })
+    .range((current - 1) * size, current * size - 1);
+
+  const qs = (over: Partial<SearchParams>) => {
+    const p = new URLSearchParams();
+    const merged = { tab, size: String(size), ...over };
+    for (const [k, v] of Object.entries(merged)) if (v) p.set(k, String(v));
+    return `?${p.toString()}`;
+  };
 
   return (
     <main className="mx-auto max-w-2xl p-6">
       <h1 className="mb-2 text-2xl font-bold">Jogos</h1>
       <p className="mb-4 text-sm text-gray-500">
-        {count ?? 0} partidas no banco. O sync puxa os jogos da temporada atual das
-        ligas ativas via API ESPN.
+        Jogos da temporada atual das ligas ativas (via API ESPN). Clique num jogo para ver todos os dados.
       </p>
 
       <div className="mb-6 rounded border p-4">
         <SyncButton />
       </div>
 
-      {!matches?.length && <p className="text-gray-500">Nenhuma partida sincronizada.</p>}
+      <div className="mb-4 flex gap-1 border-b">
+        <Link
+          href={qs({ tab: 'proximos', page: '1' })}
+          className={`border-b-2 px-3 py-2 text-sm ${tab === 'proximos' ? 'border-blue-600 font-medium text-blue-600' : 'border-transparent text-gray-500'}`}
+        >
+          Próximos Jogos
+        </Link>
+        <Link
+          href={qs({ tab: 'encerrados', page: '1' })}
+          className={`border-b-2 px-3 py-2 text-sm ${tab === 'encerrados' ? 'border-blue-600 font-medium text-blue-600' : 'border-transparent text-gray-500'}`}
+        >
+          Jogos Encerrados
+        </Link>
+      </div>
+
+      <p className="mb-2 text-sm text-gray-500">{total} jogos</p>
+      {!matches?.length && <p className="text-gray-500">Nenhum jogo.</p>}
 
       <ul className="flex flex-col gap-2">
         {matches?.map((m) => {
           const home = m.home as unknown as { name: string } | null;
           const away = m.away as unknown as { name: string } | null;
-          const score =
-            m.status === 'finished' ? ` ${m.home_score} x ${m.away_score} ` : ' x ';
+          const score = m.status === 'finished' ? ` ${m.home_score} x ${m.away_score} ` : ' x ';
           return (
-            <li key={m.id} className="flex items-center justify-between rounded border p-3">
-              <span className="text-sm">
-                {home?.name}
-                <span className="text-gray-400">{score}</span>
-                {away?.name}
-              </span>
-              <span className="text-xs text-gray-500">
-                {new Date(m.scheduled_at).toLocaleDateString('pt-BR')} ·{' '}
-                {STATUS_LABEL[m.status] ?? m.status}
-              </span>
+            <li key={m.id}>
+              <Link href={`/admin/jogos/${m.id}`} className="flex items-center justify-between rounded border p-3 hover:bg-gray-50 dark:hover:bg-gray-900">
+                <span className="text-sm">
+                  {home?.name}
+                  <span className="text-gray-400">{score}</span>
+                  {away?.name}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {new Date(m.scheduled_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} ·{' '}
+                  {STATUS_LABEL[m.status] ?? m.status}
+                </span>
+              </Link>
             </li>
           );
         })}
       </ul>
+
+      {pageCount > 1 && (
+        <div className="mt-4 flex items-center justify-between text-sm">
+          {current > 1 ? (
+            <Link href={qs({ page: String(current - 1) })} className="text-blue-600 hover:underline">← Anterior</Link>
+          ) : (
+            <span className="text-gray-300">← Anterior</span>
+          )}
+          <span className="text-gray-500">Página {current} de {pageCount}</span>
+          {current < pageCount ? (
+            <Link href={qs({ page: String(current + 1) })} className="text-blue-600 hover:underline">Próxima →</Link>
+          ) : (
+            <span className="text-gray-300">Próxima →</span>
+          )}
+        </div>
+      )}
     </main>
   );
 }

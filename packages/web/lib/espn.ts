@@ -114,3 +114,70 @@ export async function fetchEspnFixtures(slug: string, year: number): Promise<Esp
   await range(new Date(Date.UTC(year, 0, 1)), new Date(Date.UTC(year, 11, 31)));
   return [...out.values()];
 }
+
+export type EspnSummary = {
+  status: string;
+  venue: string | null;
+  attendance: number | null;
+  officials: string[];
+  broadcasts: string[];
+  headToHead: number;
+  competitors: { homeAway: string; name: string; logo: string | null; score: string | null; winner: boolean }[];
+  statistics: { label: string; home: string; away: string }[];
+  keyEvents: { time: string; type: string; team: string | null; text: string }[];
+};
+
+/** Detalhe completo de um jogo (estatísticas, lances, público, árbitros). */
+export async function fetchEspnSummary(slug: string, eventId: string): Promise<EspnSummary | null> {
+  const res = await fetch(`${ESPN_BASE}/${slug}/summary?event=${eventId}`, { cache: 'no-store' });
+  if (!res.ok) return null;
+  const j: any = await res.json();
+  const comp = j?.header?.competitions?.[0];
+  if (!comp) return null;
+
+  const competitors = (comp.competitors ?? []).map((c: any) => ({
+    homeAway: c.homeAway,
+    name: c.team?.displayName ?? c.team?.name ?? '',
+    logo: c.team?.logos?.[0]?.href ?? null,
+    score: c.score ?? null,
+    winner: !!c.winner,
+  }));
+  const homeId = comp.competitors?.find((c: any) => c.homeAway === 'home')?.team?.id;
+  const awayId = comp.competitors?.find((c: any) => c.homeAway === 'away')?.team?.id;
+
+  // Estatísticas alinhadas mandante/visitante.
+  const statMap = new Map<string, { label: string; home: string; away: string }>();
+  for (const t of j?.boxscore?.teams ?? []) {
+    const side = String(t.team?.id) === String(homeId) ? 'home' : String(t.team?.id) === String(awayId) ? 'away' : null;
+    if (!side) continue;
+    for (const st of t.statistics ?? []) {
+      const label = st.label ?? st.name ?? '';
+      const e = statMap.get(label) ?? { label, home: '', away: '' };
+      e[side] = st.displayValue ?? '';
+      statMap.set(label, e);
+    }
+  }
+
+  const keyEvents = (j?.keyEvents ?? []).map((e: any) => ({
+    time: e.clock?.displayValue ?? '',
+    type: e.type?.text ?? '',
+    team: e.team?.displayName ?? null,
+    text: e.text ?? '',
+  }));
+
+  const broadcasts = (j?.broadcasts ?? [])
+    .map((b: any) => b.media?.shortName ?? (Array.isArray(b.names) ? b.names.join('/') : null))
+    .filter(Boolean) as string[];
+
+  return {
+    status: comp.status?.type?.description ?? '',
+    venue: j?.gameInfo?.venue?.fullName ?? null,
+    attendance: j?.gameInfo?.attendance ?? null,
+    officials: (j?.gameInfo?.officials ?? []).map((o: any) => o.displayName).filter(Boolean),
+    broadcasts,
+    headToHead: (j?.headToHeadGames ?? []).length,
+    competitors,
+    statistics: [...statMap.values()],
+    keyEvents,
+  };
+}
