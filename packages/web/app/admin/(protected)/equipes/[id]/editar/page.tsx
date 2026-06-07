@@ -179,7 +179,7 @@ async function ProviderTab({
           {FIELD_LABELS[source].map(([key, label]) => {
             const v = d[key];
             return (
-              <FieldRow key={key} label={label} valueKey={key} value={v} />
+              <FieldRow key={key} label={label} valueKey={key} value={v} source={source} />
             );
           })}
         </dl>
@@ -263,7 +263,14 @@ async function ProviderTab({
   );
 }
 
-function FieldRow({ label, valueKey, value }: { label: string; valueKey: string; value: unknown }) {
+function FieldRow({ label, valueKey, value, source }: { label: string; valueKey: string; value: unknown; source?: Source }) {
+  // Escudo do time na aba ESPN bem reduzido (~15% do tamanho padrão).
+  const imgClass =
+    valueKey === 'venue_image'
+      ? 'h-16 rounded object-cover'
+      : valueKey === 'logo_url' && source === 'espn'
+        ? 'h-[5px] w-[5px] object-contain'
+        : 'h-8 w-8 object-contain';
   return (
     <>
       <dt className="text-gray-500">{label}</dt>
@@ -272,7 +279,7 @@ function FieldRow({ label, valueKey, value }: { label: string; valueKey: string;
           <span className="text-gray-300">—</span>
         ) : valueKey === 'logo_url' || valueKey === 'venue_image' ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={String(value)} alt="" className={valueKey === 'venue_image' ? 'h-16 rounded object-cover' : 'h-8 w-8 object-contain'} />
+          <img src={String(value)} alt="" className={imgClass} />
         ) : valueKey === 'website' ? (
           <a href={String(value)} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
             {String(value)}
