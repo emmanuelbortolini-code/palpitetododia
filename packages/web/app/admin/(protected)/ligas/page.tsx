@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { SyncLeaguesButton } from '@/components/admin/sync-leagues-button';
@@ -31,7 +32,7 @@ export default async function AdminLeaguesPage({
     <main className="mx-auto max-w-2xl p-6">
       <h1 className="mb-2 text-2xl font-bold">Ligas</h1>
       <p className="mb-6 text-sm text-gray-500">
-        Marque as ligas que aparecem nos filtros de Equipes (curadas). As demais ficam ocultas.
+        Ative as ligas que aparecem nos filtros de Equipes. As demais ficam ocultas.
       </p>
 
       <div className="mb-6">
@@ -51,25 +52,30 @@ export default async function AdminLeaguesPage({
       </form>
 
       <h2 className="mb-2 text-sm font-medium text-gray-500">
-        {curatedCount} curadas {q ? `· ${leagues?.length ?? 0} no filtro` : `de ${leagues?.length ?? 0}`}
+        {curatedCount} ativas {q ? `· ${leagues?.length ?? 0} no filtro` : `de ${leagues?.length ?? 0}`}
       </h2>
       {!leagues?.length && <p className="text-gray-500">Nenhuma liga.</p>}
       <ul className="flex flex-col gap-1">
         {leagues?.map((l) => (
           <li key={l.id} className="flex items-center justify-between rounded border p-2.5">
             <span className={l.curated ? 'font-medium' : 'text-gray-500'}>{l.name}</span>
-            <form action={setLeagueCurated.bind(null, l.id, !l.curated)}>
-              <button
-                type="submit"
-                className={
-                  l.curated
-                    ? 'rounded border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    : 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
-                }
-              >
-                {l.curated ? 'Descurar' : 'Curar'}
-              </button>
-            </form>
+            <div className="flex items-center gap-3">
+              <Link href={`/admin/ligas/${l.id}/editar`} className="text-sm text-blue-600 hover:underline">
+                Editar
+              </Link>
+              <form action={setLeagueCurated.bind(null, l.id, !l.curated)}>
+                <button
+                  type="submit"
+                  className={
+                    l.curated
+                      ? 'rounded border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      : 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700'
+                  }
+                >
+                  {l.curated ? 'Desativar' : 'Ativar'}
+                </button>
+              </form>
+            </div>
           </li>
         ))}
       </ul>
