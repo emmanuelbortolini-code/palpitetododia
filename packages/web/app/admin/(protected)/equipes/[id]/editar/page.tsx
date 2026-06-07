@@ -37,6 +37,8 @@ const FIELD_LABELS: Record<Source, [string, string][]> = {
   ],
 };
 
+const CURRENT_SEASON = new Date().getFullYear();
+
 const norm = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 function score(a: string, b: string): number {
@@ -155,6 +157,19 @@ async function ProviderTab({
 }) {
   if (record) {
     const d = record.data;
+    // Competições da temporada atual (ESPN só fornece 2026; AF cobre até 2024).
+    let seasonComps: string[] = [];
+    if (source === 'espn') {
+      const { data: tl } = await supabase
+        .from('team_leagues')
+        .select('league:league_id(name)')
+        .eq('team_id', teamId)
+        .eq('season', CURRENT_SEASON);
+      seasonComps = (tl ?? [])
+        .map((r) => (r.league as unknown as { name: string } | null)?.name)
+        .filter((n): n is string => !!n)
+        .sort();
+    }
     return (
       <div className="rounded border p-4">
         <p className="mb-3 text-sm text-gray-500">
@@ -168,6 +183,20 @@ async function ProviderTab({
             );
           })}
         </dl>
+        {source === 'espn' && (
+          <div className="mt-4">
+            <p className="mb-1 text-sm font-medium">Competições {CURRENT_SEASON}</p>
+            {seasonComps.length ? (
+              <ul className="text-sm text-gray-600 dark:text-gray-300">
+                {seasonComps.map((n, i) => (
+                  <li key={i}>• {n}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-400">Nenhuma competição {CURRENT_SEASON}.</p>
+            )}
+          </div>
+        )}
         <form action={unlinkProvider.bind(null, teamId, source)} className="mt-4">
           <button type="submit" className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">
             Desvincular {SOURCE_LABEL[source]}

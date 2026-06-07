@@ -5,8 +5,29 @@ import { revalidatePath } from 'next/cache';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { syncBrazilLeagues } from '@/lib/sync/refdata';
+import { importLeaguesFromCsv } from '@/lib/sync/csv-leagues';
 
 export type ActionState = { error?: string; message?: string };
+
+export async function importLeaguesCsvAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireStaff(['admin']);
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: 'Selecione um arquivo CSV.' };
+  }
+  try {
+    const r = await importLeaguesFromCsv(await file.text());
+    revalidatePath('/admin/ligas');
+    return {
+      message: `${r.updated} ligas atualizadas${r.skipped ? `, ${r.skipped} ignoradas (ID não encontrado)` : ''}.`,
+    };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Erro ao importar CSV.' };
+  }
+}
 
 function optText(v: FormDataEntryValue | null): string | null {
   const s = String(v ?? '').trim();

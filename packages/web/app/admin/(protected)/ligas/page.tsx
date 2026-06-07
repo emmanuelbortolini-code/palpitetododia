@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { SyncLeaguesButton } from '@/components/admin/sync-leagues-button';
+import { ImportLeaguesForm } from '@/components/admin/import-leagues-form';
 import { setLeagueCurated } from '@/lib/actions/refdata';
 
 export const dynamic = 'force-dynamic';
@@ -69,6 +70,10 @@ export default async function AdminLeaguesPage({
 
       <div className="mb-6">
         <SyncLeaguesButton />
+      </div>
+
+      <div className="mb-6 rounded border p-4">
+        <ImportLeaguesForm />
       </div>
 
       {/* Filtros (GET — sem JS) */}
