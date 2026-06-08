@@ -4,6 +4,7 @@ import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { TeamForm } from '@/components/admin/team-form';
 import { updateTeam, linkProvider, unlinkProvider, type Source } from '@/lib/actions/teams';
+import { fetchEspnTeamDetail } from '@/lib/espn';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,28 +15,37 @@ const FORM_COLS =
   'id, name, name_en, name_es, country_id, founded, venue_name, venue_address, venue_city, venue_capacity, website, gender_en, gender_br, gender_es, nicknames_pt, nicknames_en, nicknames_es';
 const PROVIDER_COLS = 'api_football_id, espn_id, api_football_data, espn_data, country_id';
 
-const SOURCE_LABEL: Record<Source, string> = { espn: 'ESPN', football: 'Football API' };
+const SOURCE_LABEL: Record<Source, string> = { espn: 'ESPN API', football: 'FOOTBALL API' };
 const SOURCE_ID_COL: Record<Source, string> = { espn: 'espn_id', football: 'api_football_id' };
 const SOURCE_DATA_COL: Record<Source, string> = { espn: 'espn_data', football: 'api_football_data' };
-const FIELD_LABELS: Record<Source, [string, string][]> = {
-  espn: [
-    ['name', 'Nome'],
-    ['logo_url', 'Logo'],
-  ],
-  football: [
-    ['name', 'Nome'],
-    ['code', 'Código'],
-    ['logo_url', 'Logo'],
-    ['founded', 'Fundação'],
-    ['venue_name', 'Estádio'],
-    ['venue_address', 'Endereço'],
-    ['venue_city', 'Cidade'],
-    ['venue_capacity', 'Capacidade'],
-    ['venue_surface', 'Superfície'],
-    ['venue_image', 'Imagem do estádio'],
-    ['website', 'Site'],
-  ],
-};
+
+// Chaves de "encanamento" da API que não são dados do time (referências internas).
+const SKIP_KEYS = new Set(['$ref', 'links']);
+const isImageUrl = (v: string) =>
+  /^https?:\/\//.test(v) && (/\.(png|jpe?g|svg|gif|webp)(\?|$)/i.test(v) || /espncdn|media\.api-sports/.test(v));
+
+/** Achata o JSON da API em pares [caminho, valor] de folhas primitivas. */
+function flatten(obj: unknown, prefix = ''): [string, string | number | boolean][] {
+  const out: [string, string | number | boolean][] = [];
+  if (obj == null || typeof obj !== 'object') return out;
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    if (SKIP_KEYS.has(k)) continue;
+    const path = prefix ? `${prefix}.${k}` : k;
+    if (v == null || v === '') continue;
+    if (Array.isArray(v)) {
+      v.forEach((item, i) =>
+        typeof item === 'object'
+          ? out.push(...flatten(item, `${path}[${i}]`))
+          : out.push([`${path}[${i}]`, item as string | number | boolean]),
+      );
+    } else if (typeof v === 'object') {
+      out.push(...flatten(v, path));
+    } else {
+      out.push([path, v as string | number | boolean]);
+    }
+  }
+  return out;
+}
 
 const CURRENT_SEASON = new Date().getFullYear();
 
@@ -109,8 +119,8 @@ export default async function EditarEquipePage({
       <div className="mb-5 flex gap-1 border-b">
         <TabLink to="atual">Dados Atuais</TabLink>
         <TabLink to="temporada">Temporada</TabLink>
-        <TabLink to="espn">Dados ESPN</TabLink>
-        <TabLink to="football">Dados Football API</TabLink>
+        <TabLink to="espn">ESPN API</TabLink>
+        <TabLink to="football">FOOTBALL API</TabLink>
       </div>
 
       {tab === 'atual' && (
@@ -156,7 +166,19 @@ async function ProviderTab({
   supabase: ReturnType<typeof createAdminClient>;
 }) {
   if (record) {
-    const d = record.data;
+    // ESPN: busca AO VIVO (grátis). FOOTBALL: lê do snapshot salvo (evita consumir o
+    // limite diário do plano Free a cada abertura).
+    let raw: Record<string, unknown> | null = null;
+    let liveError = false;
+    if (source === 'espn') {
+      try {
+        raw = await fetchEspnTeamDetail(record.id);
+      } catch {
+        liveError = true;
+      }
+    }
+    const fields = flatten(raw ?? record.data);
+
     // Competições da temporada atual (ESPN só fornece 2026; AF cobre até 2024).
     let seasonComps: string[] = [];
     if (source === 'espn') {
@@ -174,15 +196,17 @@ async function ProviderTab({
       <div className="rounded border p-4">
         <p className="mb-3 text-sm text-gray-500">
           Vinculado · {SOURCE_LABEL[source]} id <span className="font-mono">{record.id}</span>
+          {raw ? ' · dados ao vivo' : liveError ? ' · API indisponível (snapshot salvo)' : ' · snapshot salvo'}
         </p>
-        <dl className="grid grid-cols-[140px_1fr] gap-y-1 text-sm">
-          {FIELD_LABELS[source].map(([key, label]) => {
-            const v = d[key];
-            return (
-              <FieldRow key={key} label={label} valueKey={key} value={v} source={source} />
-            );
-          })}
-        </dl>
+        {fields.length ? (
+          <dl className="grid grid-cols-[200px_1fr] gap-y-1 text-sm">
+            {fields.map(([key, value]) => (
+              <FieldRow key={key} label={key} value={value} />
+            ))}
+          </dl>
+        ) : (
+          <p className="text-sm text-gray-400">Sem dados disponíveis.</p>
+        )}
         {source === 'espn' && (
           <div className="mt-4">
             <p className="mb-1 text-sm font-medium">Competições {CURRENT_SEASON}</p>
@@ -263,29 +287,28 @@ async function ProviderTab({
   );
 }
 
-function FieldRow({ label, valueKey, value, source }: { label: string; valueKey: string; value: unknown; source?: Source }) {
-  // Escudo do time na aba ESPN bem reduzido (~15% do tamanho padrão).
-  const imgClass =
-    valueKey === 'venue_image'
-      ? 'h-16 rounded object-cover'
-      : valueKey === 'logo_url' && source === 'espn'
-        ? 'h-[5px] w-[5px] object-contain'
-        : 'h-8 w-8 object-contain';
+function FieldRow({ label, value }: { label: string; value: string | number | boolean }) {
+  const s = String(value);
+  const isUrl = /^https?:\/\//.test(s);
+  const isColor = /color/i.test(label) && /^#?[0-9a-f]{6}$/i.test(s);
   return (
     <>
-      <dt className="text-gray-500">{label}</dt>
+      <dt className="break-all font-mono text-xs text-gray-500">{label}</dt>
       <dd>
-        {value == null || value === '' ? (
-          <span className="text-gray-300">—</span>
-        ) : valueKey === 'logo_url' || valueKey === 'venue_image' ? (
+        {isImageUrl(s) ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={String(value)} alt="" className={imgClass} />
-        ) : valueKey === 'website' ? (
-          <a href={String(value)} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-            {String(value)}
+          <img src={s} alt="" className="h-10 w-10 object-contain" />
+        ) : isColor ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-3.5 w-3.5 rounded border" style={{ backgroundColor: `#${s.replace('#', '')}` }} />
+            {s}
+          </span>
+        ) : isUrl ? (
+          <a href={s} target="_blank" rel="noreferrer" className="break-all text-blue-600 hover:underline">
+            {s}
           </a>
         ) : (
-          String(value)
+          s
         )}
       </dd>
     </>

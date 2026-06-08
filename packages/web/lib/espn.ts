@@ -51,6 +51,18 @@ export async function fetchEspnLeagueTeams(slug: string): Promise<EspnLeagueData
   };
 }
 
+/**
+ * Detalhe completo de um time pela ESPN. O endpoint `sports.core` dispensa o
+ * slug da liga e devolve a identidade completa (cores, logos, estádio inline).
+ */
+export async function fetchEspnTeamDetail(teamId: string): Promise<Record<string, unknown> | null> {
+  const res = await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/teams/${teamId}`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export type EspnStanding = {
   rank: number | null;
   teamId: string;
