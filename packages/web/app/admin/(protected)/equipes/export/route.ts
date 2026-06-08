@@ -31,10 +31,16 @@ function cell(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-// Apelidos voltam ao formato do modelo: array JSON de {value} (round-trip no import).
-function nicks(v: string[] | null): string {
+// Apelidos voltam ao formato do modelo: array JSON de {value, gender} (round-trip
+// no import). Aceita a forma canônica [{value, gender}] e o legado [string].
+type Nick = string | { value?: string; gender?: string | null };
+function nicks(v: Nick[] | null): string {
   if (!v?.length) return '';
-  return JSON.stringify(v.map((value) => ({ value })));
+  const arr = v
+    .map((x) => (typeof x === 'string' ? { value: x } : x))
+    .filter((x): x is { value: string; gender?: string | null } => !!x.value)
+    .map((x) => (x.gender ? { value: x.value, gender: x.gender } : { value: x.value }));
+  return arr.length ? JSON.stringify(arr) : '';
 }
 
 export async function GET() {
@@ -67,9 +73,9 @@ export async function GET() {
         t.venue_name,
         t.venue_address,
         t.website,
-        nicks(t.nicknames_en as string[] | null),
-        nicks(t.nicknames_pt as string[] | null),
-        nicks(t.nicknames_es as string[] | null),
+        nicks(t.nicknames_en as Nick[] | null),
+        nicks(t.nicknames_pt as Nick[] | null),
+        nicks(t.nicknames_es as Nick[] | null),
         t.gender_en,
         t.gender_br,
         t.gender_es,

@@ -6,17 +6,25 @@ import { createAdminClient } from '@/lib/supabase/admin';
 // ou espn_id, o mesmo que o export emite). Os campos preenchidos viram `overrides`
 // — passam a ter prioridade e o sync não os sobrescreve. service-role.
 
-// Apelidos no CSV: JSON array de {value, gender} (ou strings). Extrai os valores.
-function parseNicknames(raw: string | undefined): string[] | null {
+// Apelidos no CSV: JSON array de {value, gender} (ou strings). Preserva o gênero
+// por apelido (formato canônico do banco: [{value, gender}]).
+type Nick = { value: string; gender?: string | null };
+function parseNicknames(raw: string | undefined): Nick[] | null {
   const s = (raw ?? '').trim();
   if (!s) return null;
   try {
     const arr = JSON.parse(s);
     if (!Array.isArray(arr)) return null;
-    const vals = arr
-      .map((x) => (typeof x === 'string' ? x : x?.value))
-      .filter((v): v is string => typeof v === 'string' && v.length > 0);
-    return vals.length ? vals : null;
+    const out: Nick[] = [];
+    for (const x of arr) {
+      if (typeof x === 'string') {
+        if (x) out.push({ value: x });
+      } else if (x && typeof x.value === 'string' && x.value) {
+        const g = typeof x.gender === 'string' ? x.gender.trim() : '';
+        out.push(g ? { value: x.value, gender: g } : { value: x.value });
+      }
+    }
+    return out.length ? out : null;
   } catch {
     return null;
   }

@@ -17,16 +17,11 @@ type TeamValues = {
   venue_city: string | null;
   venue_capacity: number | null;
   website: string | null;
-  gender_en: string | null;
   gender_br: string | null;
   gender_es: string | null;
-  nicknames_pt: string[] | null;
-  nicknames_en: string[] | null;
-  nicknames_es: string[] | null;
 };
 
 const field = 'rounded border px-3 py-2 dark:bg-gray-900';
-const list = (v: string[] | null) => (v ?? []).join(', ');
 
 export function TeamForm({
   action,
@@ -78,19 +73,23 @@ export function TeamForm({
         <span />
       </div>
 
-      <p className="text-xs text-gray-500">Gênero (ex.: male / female).</p>
-      <div className="grid grid-cols-3 gap-4">
+      <p className="text-xs text-gray-500">Gênero gramatical do nome (concordância de artigo/adjetivo).</p>
+      <div className="grid grid-cols-2 gap-4">
         <label className="flex flex-col gap-1 text-sm">
-          Gênero (EN)
-          <input name="gender_en" defaultValue={v.gender_en ?? ''} className={field} />
+          Gênero do Nome (BR)
+          <select name="gender_br" defaultValue={v.gender_br ?? ''} className={field}>
+            <option value="">—</option>
+            <option value="male">male</option>
+            <option value="female">female</option>
+          </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          Gênero (BR)
-          <input name="gender_br" defaultValue={v.gender_br ?? ''} className={field} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Gênero (ES)
-          <input name="gender_es" defaultValue={v.gender_es ?? ''} className={field} />
+          Gênero do Nome (ES)
+          <select name="gender_es" defaultValue={v.gender_es ?? ''} className={field}>
+            <option value="">—</option>
+            <option value="male">male</option>
+            <option value="female">female</option>
+          </select>
         </label>
       </div>
 
@@ -123,22 +122,6 @@ export function TeamForm({
         Site oficial
         <input name="website" type="url" placeholder="https://..." defaultValue={v.website ?? ''} className={field} />
       </label>
-
-      <p className="text-xs text-gray-500">Apelidos separados por vírgula.</p>
-      <div className="grid grid-cols-3 gap-4">
-        <label className="flex flex-col gap-1 text-sm">
-          Apelidos (PT)
-          <input name="nicknames_pt" defaultValue={list(v.nicknames_pt)} className={field} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Apelidos (EN)
-          <input name="nicknames_en" defaultValue={list(v.nicknames_en)} className={field} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Apelidos (ES)
-          <input name="nicknames_es" defaultValue={list(v.nicknames_es)} className={field} />
-        </label>
-      </div>
 
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       <div className="w-48">

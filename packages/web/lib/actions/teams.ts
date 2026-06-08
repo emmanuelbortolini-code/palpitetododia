@@ -68,15 +68,6 @@ function optText(v: FormDataEntryValue | null): string | null {
   return s || null;
 }
 
-// "Apelido 1, Apelido 2" → ["Apelido 1", "Apelido 2"] (ou null).
-function optList(v: FormDataEntryValue | null): string[] | null {
-  const items = String(v ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return items.length ? items : null;
-}
-
 export async function updateTeam(
   id: string,
   _prev: ActionState,
@@ -100,12 +91,8 @@ export async function updateTeam(
     venue_city: optText(formData.get('venue_city')),
     venue_capacity: optInt(formData.get('venue_capacity')),
     website: optText(formData.get('website')),
-    gender_en: optText(formData.get('gender_en')),
     gender_br: optText(formData.get('gender_br')),
     gender_es: optText(formData.get('gender_es')),
-    nicknames_pt: optList(formData.get('nicknames_pt')),
-    nicknames_en: optList(formData.get('nicknames_en')),
-    nicknames_es: optList(formData.get('nicknames_es')),
   };
 
   const supabase = createAdminClient();
@@ -115,7 +102,7 @@ export async function updateTeam(
   const { data: cur } = await supabase
     .from('teams')
     .select(
-      'overrides, name, name_en, name_es, country_id, founded, venue_name, venue_address, venue_city, venue_capacity, website, gender_en, gender_br, gender_es, nicknames_pt, nicknames_en, nicknames_es',
+      'overrides, name, name_en, name_es, country_id, founded, venue_name, venue_address, venue_city, venue_capacity, website, gender_br, gender_es',
     )
     .eq('id', id)
     .single();
@@ -134,6 +121,61 @@ export async function updateTeam(
 
   revalidatePath('/admin/equipes');
   redirect('/admin/equipes');
+}
+
+// Apelido = { value, gender }. Gênero só em PT/ES (inglês não tem gênero).
+type Nick = { value: string; gender?: string | null };
+function nickList(values: FormDataEntryValue[], genders: FormDataEntryValue[] | null): Nick[] | null {
+  const out: Nick[] = [];
+  for (let i = 0; i < values.length; i++) {
+    const value = String(values[i] ?? '').trim();
+    if (!value) continue;
+    if (genders) {
+      const g = String(genders[i] ?? '').trim();
+      out.push({ value, gender: g || null });
+    } else {
+      out.push({ value });
+    }
+  }
+  return out.length ? out : null;
+}
+
+// Salva os apelidos (aba Apelido). Lista dinâmica por idioma; cada apelido PT/ES
+// carrega seu próprio gênero. Campos editados viram `override` (sync não sobrescreve).
+export async function updateNicknames(
+  id: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireStaff(['admin']);
+
+  const next: Record<string, unknown> = {
+    nicknames_pt: nickList(formData.getAll('nick_pt_value'), formData.getAll('nick_pt_gender')),
+    nicknames_en: nickList(formData.getAll('nick_en_value'), null),
+    nicknames_es: nickList(formData.getAll('nick_es_value'), formData.getAll('nick_es_gender')),
+  };
+
+  const supabase = createAdminClient();
+  const { data: cur } = await supabase
+    .from('teams')
+    .select('overrides, nicknames_pt, nicknames_en, nicknames_es')
+    .eq('id', id)
+    .single();
+  const curRow = cur as Record<string, unknown> | null;
+  const ov = new Set(Array.isArray(curRow?.overrides) ? (curRow!.overrides as string[]) : []);
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  for (const [k, v] of Object.entries(next)) {
+    if (!curRow || !same(curRow[k], v)) ov.add(k);
+  }
+
+  const { error } = await supabase
+    .from('teams')
+    .update({ ...next, overrides: [...ov], updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) return { error: error.message };
+
+  revalidatePath('/admin/equipes');
+  return { message: 'Apelidos salvos.' };
 }
 
 // Vincula uma linha "alias" (ex.: ESPN) a uma linha canônica (ex.: API-Football),

@@ -3,16 +3,17 @@ import { notFound } from 'next/navigation';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { TeamForm } from '@/components/admin/team-form';
-import { updateTeam, linkProvider, unlinkProvider, type Source } from '@/lib/actions/teams';
+import { NicknamesForm } from '@/components/admin/nicknames-form';
+import { updateTeam, updateNicknames, linkProvider, unlinkProvider, type Source } from '@/lib/actions/teams';
 import { fetchEspnTeamDetail } from '@/lib/espn';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'atual' | 'temporada' | 'espn' | 'football';
+type Tab = 'atual' | 'apelido' | 'temporada' | 'espn' | 'football';
 type SearchParams = { tab?: string; q?: string };
 
 const FORM_COLS =
-  'id, name, name_en, name_es, country_id, founded, venue_name, venue_address, venue_city, venue_capacity, website, gender_en, gender_br, gender_es, nicknames_pt, nicknames_en, nicknames_es';
+  'id, name, name_en, name_es, country_id, founded, venue_name, venue_address, venue_city, venue_capacity, website, gender_br, gender_es, nicknames_pt, nicknames_en, nicknames_es';
 const PROVIDER_COLS = 'api_football_id, espn_id, api_football_data, espn_data, country_id';
 
 const SOURCE_LABEL: Record<Source, string> = { espn: 'ESPN API', football: 'FOOTBALL API' };
@@ -81,7 +82,7 @@ export default async function EditarEquipePage({
   if (!team) notFound();
 
   const t = team as Record<string, unknown>;
-  const tab: Tab = ['temporada', 'espn', 'football'].includes(searchParams.tab ?? '')
+  const tab: Tab = ['apelido', 'temporada', 'espn', 'football'].includes(searchParams.tab ?? '')
     ? (searchParams.tab as Tab)
     : 'atual';
 
@@ -118,6 +119,7 @@ export default async function EditarEquipePage({
 
       <div className="mb-5 flex gap-1 border-b">
         <TabLink to="atual">Dados Atuais</TabLink>
+        <TabLink to="apelido">Apelido</TabLink>
         <TabLink to="temporada">Temporada</TabLink>
         <TabLink to="espn">ESPN API</TabLink>
         <TabLink to="football">FOOTBALL API</TabLink>
@@ -129,6 +131,10 @@ export default async function EditarEquipePage({
           countries={countries ?? []}
           defaultValues={team as never}
         />
+      )}
+
+      {tab === 'apelido' && (
+        <NicknamesForm action={updateNicknames.bind(null, team.id as string)} defaultValues={team as never} />
       )}
 
       {tab === 'temporada' && <SeasonTab teamId={params.id} supabase={supabase} />}
