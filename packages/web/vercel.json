@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/fetch-matches",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/predictions",
+      "schedule": "30 8 * * *"
     }
   ]
 }
