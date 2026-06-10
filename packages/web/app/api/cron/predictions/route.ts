@@ -1,4 +1,5 @@
 import { syncPredictions } from '@/lib/sync/predictions';
+import { syncWcPredictions } from '@/lib/sync/wc-predictions';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,8 @@ export async function GET(request: Request) {
 
   try {
     const result = await syncPredictions();
-    return Response.json({ ok: true, ...result });
+    const wc = await syncWcPredictions();
+    return Response.json({ ok: true, ...result, wcPredicted: wc.predicted });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro desconhecido';
     return Response.json({ ok: false, error: message }, { status: 500 });

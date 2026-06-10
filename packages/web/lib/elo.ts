@@ -21,11 +21,21 @@ export type EloRatings = Map<string, { rating: number; played: number }>;
 const BASE = 1500;
 const HOME_ADV = 65; // vantagem de mando (em pontos de Elo) p/ jogos NÃO neutros
 
+export const BASE_RATING = BASE;
+
 /** Multiplicador por saldo de gols (World Football Elo). */
 function goalMultiplier(gd: number): number {
   if (gd <= 1) return 1;
   if (gd === 2) return 1.5;
   return (11 + gd) / 8;
+}
+
+/** Variação de Elo do mandante após um jogo (o visitante recebe o simétrico). */
+export function eloDelta(ratingHome: number, ratingAway: number, hg: number, ag: number, neutral: boolean, importance: number): number {
+  const dr = ratingHome - ratingAway + (neutral ? 0 : HOME_ADV);
+  const we = 1 / (1 + 10 ** (-dr / 400)); // expectativa do mandante
+  const w = hg > ag ? 1 : hg < ag ? 0 : 0.5;
+  return importance * goalMultiplier(Math.abs(hg - ag)) * (w - we);
 }
 
 /**
@@ -43,10 +53,7 @@ export function computeElo(games: IntlGame[]): EloRatings {
     if (!g.home || !g.away) continue;
     const rh = get(g.home);
     const ra = get(g.away);
-    const dr = rh - ra + (g.neutral ? 0 : HOME_ADV);
-    const we = 1 / (1 + 10 ** (-dr / 400)); // expectativa do mandante
-    const w = g.hg > g.ag ? 1 : g.hg < g.ag ? 0 : 0.5;
-    const delta = g.importance * goalMultiplier(Math.abs(g.hg - g.ag)) * (w - we);
+    const delta = eloDelta(rh, ra, g.hg, g.ag, g.neutral, g.importance);
     rating.set(g.home, rh + delta);
     rating.set(g.away, ra - delta);
     played.set(g.home, (played.get(g.home) ?? 0) + 1);

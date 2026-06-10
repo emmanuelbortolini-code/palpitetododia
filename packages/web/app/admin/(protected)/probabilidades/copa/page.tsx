@@ -1,44 +1,20 @@
 import Link from 'next/link';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { computeElo, eloMatchProbabilities, type IntlGame } from '@/lib/elo';
+import { computeElo, eloMatchProbabilities } from '@/lib/elo';
+import { loadIntlHistory } from '@/lib/intl-history';
 
 export const dynamic = 'force-dynamic';
 
 const UPCOMING = ['scheduled', 'live', 'postponed'];
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-/** Carrega TODOS os jogos internacionais (paginado; o PostgREST limita ~1000/consulta). */
-async function loadHistory(supabase: ReturnType<typeof createAdminClient>): Promise<IntlGame[]> {
-  const games: IntlGame[] = [];
-  for (let from = 0; ; from += 1000) {
-    const { data } = await supabase
-      .from('international_matches')
-      .select('played_at, home_espn_id, away_espn_id, home_goals, away_goals, neutral, importance')
-      .order('played_at', { ascending: true })
-      .range(from, from + 999);
-    if (!data?.length) break;
-    for (const g of data)
-      games.push({
-        date: g.played_at as string,
-        home: String(g.home_espn_id),
-        away: String(g.away_espn_id),
-        hg: g.home_goals as number,
-        ag: g.away_goals as number,
-        neutral: !!g.neutral,
-        importance: g.importance as number,
-      });
-    if (data.length < 1000) break;
-  }
-  return games;
-}
-
 export default async function CopaPage() {
   await requireStaff(['admin']);
   const supabase = createAdminClient();
 
   const { data: league } = await supabase.from('leagues').select('id').eq('slug', 'copa-do-mundo-fifa').maybeSingle();
-  const games = await loadHistory(supabase);
+  const games = await loadIntlHistory(supabase);
   const elo = computeElo(games);
 
   const { data: matches } = league

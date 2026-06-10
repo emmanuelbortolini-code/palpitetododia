@@ -6,6 +6,7 @@
 // Tudo derivado da própria amostra; sem libs externas.
 
 import { buildWeightedLeagueModel, matchProbabilities, type Game } from './probability';
+import { eloDelta, eloMatchProbabilities, BASE_RATING, type IntlGame } from './elo';
 
 /** Previsão já confrontada com o resultado real — unidade de avaliação das métricas. */
 export type ScoredPred = {
@@ -82,6 +83,49 @@ export function walkForwardBacktest(
     });
   }
 
+  return { scored, skipped };
+}
+
+/**
+ * Backtest walk-forward do modelo de seleções (Elo): processa os jogos internacionais em
+ * ordem; prevê cada um com o Elo PRÉ-jogo (sem vazamento) e só então atualiza os ratings.
+ * Exige `minPlayed` jogos prévios de cada seleção. Honesto e O(n) — o Elo já é sequencial.
+ */
+export function eloWalkForward(games: IntlGame[], minPlayed = 5): { scored: ScoredPred[]; skipped: number } {
+  const rating = new Map<string, number>();
+  const played = new Map<string, number>();
+  const get = (id: string) => rating.get(id) ?? BASE_RATING;
+  const scored: ScoredPred[] = [];
+  let skipped = 0;
+
+  for (const g of [...games].sort((a, b) => a.date.localeCompare(b.date))) {
+    if (!g.home || !g.away) {
+      skipped++;
+      continue;
+    }
+    const rh = get(g.home);
+    const ra = get(g.away);
+    if ((played.get(g.home) ?? 0) >= minPlayed && (played.get(g.away) ?? 0) >= minPlayed) {
+      const p = eloMatchProbabilities(rh, ra);
+      scored.push({
+        pHome: p.homeWin,
+        pDraw: p.draw,
+        pAway: p.awayWin,
+        pOver: p.over25,
+        pBtts: p.btts,
+        outcome: g.hg > g.ag ? 'H' : g.hg < g.ag ? 'A' : 'D',
+        over: g.hg + g.ag >= 3 ? 1 : 0,
+        btts: g.hg >= 1 && g.ag >= 1 ? 1 : 0,
+      });
+    } else {
+      skipped++;
+    }
+    const delta = eloDelta(rh, ra, g.hg, g.ag, g.neutral, g.importance);
+    rating.set(g.home, rh + delta);
+    rating.set(g.away, ra - delta);
+    played.set(g.home, (played.get(g.home) ?? 0) + 1);
+    played.set(g.away, (played.get(g.away) ?? 0) + 1);
+  }
   return { scored, skipped };
 }
 

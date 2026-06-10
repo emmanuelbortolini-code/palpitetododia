@@ -3,6 +3,7 @@ import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   walkForwardBacktest,
+  eloWalkForward,
   evaluate,
   type TeamSchedule,
   type FinishedMatch,
@@ -11,6 +12,7 @@ import {
   type ReliabilityBin,
 } from '@/lib/calibration';
 import type { Game } from '@/lib/probability';
+import { loadIntlHistory } from '@/lib/intl-history';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +95,11 @@ export default async function CalibracaoPage() {
   });
   const persistedReport = persistedScored.length ? evaluate(persistedScored) : null;
 
+  // --- Backtest do modelo de seleções (Elo) sobre o histórico internacional ---
+  const intl = await loadIntlHistory(supabase);
+  const { scored: eloScored, skipped: eloSkipped } = eloWalkForward(intl);
+  const eloReport = eloScored.length ? evaluate(eloScored) : null;
+
   return (
     <main className="mx-auto max-w-4xl p-6">
       <div className="mb-2 flex items-baseline justify-between">
@@ -126,6 +133,17 @@ export default async function CalibracaoPage() {
         }
         report={persistedReport}
         empty="Nenhuma previsão pontuada ainda. Gere previsões dos próximos jogos e volte após eles encerrarem."
+      />
+
+      <Section
+        title="Backtest do modelo de seleções (Elo) — Copa do Mundo"
+        subtitle={
+          eloReport
+            ? `Prevê cada jogo internacional com o Elo pré-jogo (sem vazamento) e pontua contra o resultado. ${eloReport.n} jogos avaliados, ${eloSkipped} pulados (Elo ainda imaturo).`
+            : 'Importe o histórico internacional (migration 021 + sync-wc-history.cjs) para avaliar o modelo de seleções.'
+        }
+        report={eloReport}
+        empty="Sem histórico internacional para avaliar o modelo da Copa."
       />
     </main>
   );
