@@ -6,6 +6,7 @@ import { TeamForm } from '@/components/admin/team-form';
 import { NicknamesForm } from '@/components/admin/nicknames-form';
 import { updateTeam, updateNicknames, linkProvider, unlinkProvider, type Source } from '@/lib/actions/teams';
 import { fetchEspnTeamDetail } from '@/lib/espn';
+import { CATEGORY_LABEL, CATEGORY_ORDER, HIDDEN_STATS, STAT_LABEL, formatStatValue } from '@/lib/stat-labels';
 
 export const dynamic = 'force-dynamic';
 
@@ -411,7 +412,6 @@ async function StatsTab({
     <div className="flex flex-col gap-5">
       {rows.map((r, idx) => {
         const league = (r.league as unknown as { name: string } | null)?.name ?? '—';
-        const flat = flatten(r.raw).filter(([k]) => !k.startsWith('record'));
         return (
           <div key={idx} className="rounded border p-4">
             <div className="mb-3 flex items-baseline justify-between">
@@ -441,19 +441,49 @@ async function StatsTab({
                 <Split label="Fora" p="away_" r={r} />
               </tbody>
             </table>
-            {flat.length > 0 && (
-              <details className="mt-3">
-                <summary className="cursor-pointer text-sm text-gray-500">Estatísticas detalhadas (ESPN)</summary>
-                <dl className="mt-2 grid grid-cols-[200px_1fr] gap-y-1 text-sm">
-                  {flat.map(([key, value]) => (
-                    <FieldRow key={key} label={key} value={value} />
-                  ))}
-                </dl>
-              </details>
-            )}
+            <DetailedStats raw={r.raw} />
           </div>
         );
       })}
     </div>
+  );
+}
+
+type EspnStat = { name: string; value: number; displayValue: string };
+type EspnCategory = { name: string; stats: EspnStat[] };
+
+/** Tabelas de estatísticas detalhadas da ESPN, agrupadas por categoria com rótulos PT. */
+function DetailedStats({ raw }: { raw: unknown }) {
+  const cats = ((raw as { statistics?: EspnCategory[] } | null)?.statistics ?? []).filter((c) => c.stats?.length);
+  if (!cats.length) return null;
+  const ordered = [...cats].sort(
+    (a, b) => (CATEGORY_ORDER.indexOf(a.name) + 1 || 99) - (CATEGORY_ORDER.indexOf(b.name) + 1 || 99),
+  );
+
+  return (
+    <details className="mt-3">
+      <summary className="cursor-pointer text-sm text-gray-500">Estatísticas detalhadas (ESPN)</summary>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        {ordered.map((cat) => {
+          const stats = cat.stats.filter((s) => !HIDDEN_STATS.has(s.name));
+          if (!stats.length) return null;
+          return (
+            <div key={cat.name}>
+              <p className="mb-1 text-sm font-medium">{CATEGORY_LABEL[cat.name] ?? cat.name}</p>
+              <table className="w-full text-sm">
+                <tbody>
+                  {stats.map((s) => (
+                    <tr key={s.name} className="border-t">
+                      <td className="py-1 pr-3 text-gray-600 dark:text-gray-300">{STAT_LABEL[s.name] ?? s.name}</td>
+                      <td className="py-1 text-right tabular-nums">{formatStatValue(s.name, s.value, s.displayValue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+      </div>
+    </details>
   );
 }
