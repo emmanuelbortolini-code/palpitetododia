@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/team-stats",
+      "schedule": "30 7 * * *"
+    },
+    {
       "path": "/api/cron/fetch-matches",
       "schedule": "0 8 * * *"
     },
