@@ -108,8 +108,10 @@ export async function fetchEspnTeamRecord(slug: string, teamId: string): Promise
 }
 
 // Estatísticas agregadas do time na temporada (categorias defensive/general/
-// goalKeeping/offensive). Usado para clean sheets + o blob bruto.
-export type EspnTeamSeasonStats = { cleanSheets: number | null; raw: unknown } | null;
+// goalKeeping/offensive). `stats` achata name->value de todas as categorias
+// (ex.: appearances, wins, totalGoals, goalsConceded, cleanSheet); `raw` mantém
+// as categorias para exibir. Disponível inclusive em copas (sem tabela/record).
+export type EspnTeamSeasonStats = { stats: Record<string, number>; raw: unknown } | null;
 
 export async function fetchEspnTeamSeasonStats(
   slug: string,
@@ -121,10 +123,49 @@ export async function fetchEspnTeamSeasonStats(
   if (!res.ok) return null;
   const j: any = await res.json();
   const cats: any[] = j?.splits?.categories ?? [];
-  const find = (cat: string, name: string) =>
-    cats.find((c) => c.name === cat)?.stats?.find((s: any) => s.name === name)?.value ?? null;
-  const cs = find('goalKeeping', 'cleanSheet');
-  return { cleanSheets: typeof cs === 'number' ? cs : null, raw: cats };
+  if (!cats.length) return null;
+  const stats: Record<string, number> = {};
+  for (const c of cats) for (const s of c.stats ?? []) if (typeof s.value === 'number') stats[s.name] = s.value;
+  return { stats, raw: cats };
+}
+
+// Jogos encerrados de um time numa competição (ESPN schedule). Usado para
+// agregar copas (mata-mata), onde não há tabela/record e o endpoint de
+// statistics vem inconsistente. Traz placar e mando de cada partida.
+export type EspnScheduleGame = {
+  date: string;
+  homeAway: 'home' | 'away';
+  gf: number;
+  ga: number;
+  opponent: string;
+  result: 'W' | 'D' | 'L';
+};
+
+export async function fetchEspnTeamSchedule(slug: string, teamId: string, season: number): Promise<EspnScheduleGame[]> {
+  const res = await fetch(`${ESPN_BASE}/${slug}/teams/${teamId}/schedule`, { cache: 'no-store' });
+  if (!res.ok) return [];
+  const j: any = await res.json();
+  const out: EspnScheduleGame[] = [];
+  for (const e of j?.events ?? []) {
+    const comp = e?.competitions?.[0];
+    if (!comp?.status?.type?.completed) continue;
+    if (typeof e.date === 'string' && !e.date.startsWith(String(season))) continue;
+    const me = comp.competitors?.find((c: any) => String(c.team?.id) === String(teamId));
+    const opp = comp.competitors?.find((c: any) => String(c.team?.id) !== String(teamId));
+    if (!me || !opp) continue;
+    const gf = Number(me.score?.value);
+    const ga = Number(opp.score?.value);
+    if (!Number.isFinite(gf) || !Number.isFinite(ga)) continue;
+    out.push({
+      date: e.date,
+      homeAway: me.homeAway === 'home' ? 'home' : 'away',
+      gf,
+      ga,
+      opponent: opp.team?.displayName ?? opp.team?.abbreviation ?? '',
+      result: gf > ga ? 'W' : gf < ga ? 'L' : 'D',
+    });
+  }
+  return out;
 }
 
 // ── Jogos (scoreboard) ──────────────────────────────────────────────────────

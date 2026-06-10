@@ -6,12 +6,12 @@ import { TeamForm } from '@/components/admin/team-form';
 import { NicknamesForm } from '@/components/admin/nicknames-form';
 import { updateTeam, updateNicknames, linkProvider, unlinkProvider, type Source } from '@/lib/actions/teams';
 import { fetchEspnTeamDetail } from '@/lib/espn';
-import { CATEGORY_LABEL, CATEGORY_ORDER, HIDDEN_STATS, STAT_LABEL, formatStatValue } from '@/lib/stat-labels';
+import { CATEGORY_LABEL, CATEGORY_ORDER, HIDDEN_STATS, CUP_HIDDEN_STATS, STAT_LABEL, formatStatValue } from '@/lib/stat-labels';
 
 export const dynamic = 'force-dynamic';
 
 type Tab = 'atual' | 'apelido' | 'temporada' | 'estatisticas' | 'espn' | 'football';
-type SearchParams = { tab?: string; q?: string };
+type SearchParams = { tab?: string; q?: string; comp?: string };
 
 const FORM_COLS =
   'id, name, name_en, name_es, country_id, founded, venue_name, venue_address, venue_city, venue_capacity, website, gender_br, gender_es, nicknames_pt, nicknames_en, nicknames_es';
@@ -141,7 +141,9 @@ export default async function EditarEquipePage({
 
       {tab === 'temporada' && <SeasonTab teamId={params.id} supabase={supabase} />}
 
-      {tab === 'estatisticas' && <StatsTab teamId={params.id} supabase={supabase} />}
+      {tab === 'estatisticas' && (
+        <StatsTab teamId={params.id} comp={searchParams.comp ?? ''} supabase={supabase} />
+      )}
 
       {(tab === 'espn' || tab === 'football') && (
         <ProviderTab
@@ -372,9 +374,11 @@ async function SeasonTab({
 
 async function StatsTab({
   teamId,
+  comp,
   supabase,
 }: {
   teamId: string;
+  comp: string;
   supabase: ReturnType<typeof createAdminClient>;
 }) {
   const { data } = await supabase
@@ -394,58 +398,123 @@ async function StatsTab({
     );
   }
 
-  // Linha de tabela com J/V/E/D/GP/GC por recorte (geral, casa, fora).
-  const num = (v: unknown) => (typeof v === 'number' ? v : '—');
-  const Split = ({ label, p, r }: { label: string; p: string; r: Record<string, unknown> }) => (
+  // Competições disponíveis (uma sub-aba por liga), na ordem em que aparecem.
+  const leagues: { id: string; name: string }[] = [];
+  for (const r of rows) {
+    const id = r.league_id as string;
+    if (!leagues.some((l) => l.id === id)) {
+      leagues.push({ id, name: (r.league as unknown as { name: string } | null)?.name ?? '—' });
+    }
+  }
+  const selected = leagues.some((l) => l.id === comp) ? comp : leagues[0].id;
+  const shown = rows.filter((r) => (r.league_id as string) === selected);
+
+  return (
+    <div>
+      {leagues.length > 1 && (
+        <div className="mb-4 flex flex-wrap gap-1 border-b">
+          {leagues.map((l) => (
+            <Link
+              key={l.id}
+              href={`/admin/equipes/${teamId}/editar?tab=estatisticas&comp=${l.id}`}
+              className={`border-b-2 px-3 py-1.5 text-sm ${
+                l.id === selected ? 'border-blue-600 font-medium text-blue-600' : 'border-transparent text-gray-500'
+              }`}
+            >
+              {l.name}
+            </Link>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-col gap-5">
+        {shown.map((r, idx) => (
+          <SeasonStatsCard key={idx} r={r} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const numCell = (v: unknown) => (typeof v === 'number' ? v : '—');
+
+/** Card de uma competição/temporada: cabeçalho + V/E/D/GP/GC (com splits se houver) + detalhes. */
+function SeasonStatsCard({ r }: { r: Record<string, unknown> }) {
+  const league = (r.league as unknown as { name: string } | null)?.name ?? '—';
+  const hasSplits = r.home_wins != null; // copas não têm tabela → sem splits de V/E/D
+  const header = [
+    r.rank != null ? `${r.rank as number}º` : null,
+    r.points != null ? `${r.points as number} pts` : null,
+    r.clean_sheets != null ? `${r.clean_sheets as number} CS` : null,
+  ].filter(Boolean);
+
+  const Split = ({ label, p }: { label: string; p: string }) => (
     <tr className="border-t">
       <td className="py-1.5 pr-3 font-medium">{label}</td>
-      <td className="py-1.5 text-center">{num(r[`${p}played`])}</td>
-      <td className="py-1.5 text-center">{num(r[`${p}wins`])}</td>
-      <td className="py-1.5 text-center">{num(r[`${p}draws`])}</td>
-      <td className="py-1.5 text-center">{num(r[`${p}losses`])}</td>
-      <td className="py-1.5 text-center">{num(r[`${p}gf`])}</td>
-      <td className="py-1.5 text-center">{num(r[`${p}ga`])}</td>
+      <td className="py-1.5 text-center">{numCell(r[`${p}played`])}</td>
+      <td className="py-1.5 text-center">{numCell(r[`${p}wins`])}</td>
+      <td className="py-1.5 text-center">{numCell(r[`${p}draws`])}</td>
+      <td className="py-1.5 text-center">{numCell(r[`${p}losses`])}</td>
+      <td className="py-1.5 text-center">{numCell(r[`${p}gf`])}</td>
+      <td className="py-1.5 text-center">{numCell(r[`${p}ga`])}</td>
     </tr>
   );
 
   return (
-    <div className="flex flex-col gap-5">
-      {rows.map((r, idx) => {
-        const league = (r.league as unknown as { name: string } | null)?.name ?? '—';
-        return (
-          <div key={idx} className="rounded border p-4">
-            <div className="mb-3 flex items-baseline justify-between">
-              <p className="font-medium">
-                {league} <span className="text-gray-500">{r.season as number}</span>
-              </p>
-              <p className="text-sm text-gray-500">
-                {r.rank ? `${r.rank as number}º` : ''} · {r.points as number} pts ·{' '}
-                {r.clean_sheets != null ? `${r.clean_sheets as number} CS` : ''}
-              </p>
-            </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-gray-500">
-                  <th className="py-1 text-left font-medium"></th>
-                  <th className="py-1 font-medium">J</th>
-                  <th className="py-1 font-medium">V</th>
-                  <th className="py-1 font-medium">E</th>
-                  <th className="py-1 font-medium">D</th>
-                  <th className="py-1 font-medium">GP</th>
-                  <th className="py-1 font-medium">GC</th>
-                </tr>
-              </thead>
-              <tbody>
-                <Split label="Geral" p="" r={r} />
-                <Split label="Casa" p="home_" r={r} />
-                <Split label="Fora" p="away_" r={r} />
-              </tbody>
-            </table>
-            <DetailedStats raw={r.raw} />
-          </div>
-        );
-      })}
+    <div className="rounded border p-4">
+      <div className="mb-3 flex items-baseline justify-between">
+        <p className="font-medium">
+          {league} <span className="text-gray-500">{r.season as number}</span>
+        </p>
+        {header.length > 0 && <p className="text-sm text-gray-500">{header.join(' · ')}</p>}
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-gray-500">
+            <th className="py-1 text-left font-medium"></th>
+            <th className="py-1 font-medium">J</th>
+            <th className="py-1 font-medium">V</th>
+            <th className="py-1 font-medium">E</th>
+            <th className="py-1 font-medium">D</th>
+            <th className="py-1 font-medium">GP</th>
+            <th className="py-1 font-medium">GC</th>
+          </tr>
+        </thead>
+        <tbody>
+          <Split label="Geral" p="" />
+          {hasSplits && <Split label="Casa" p="home_" />}
+          {hasSplits && <Split label="Fora" p="away_" />}
+        </tbody>
+      </table>
+      <DetailedStats raw={r.raw} />
+      <CupGames raw={r.raw} />
     </div>
+  );
+}
+
+type ScheduleGame = { date: string; homeAway: 'home' | 'away'; gf: number; ga: number; opponent: string; result: 'W' | 'D' | 'L' };
+const RESULT_LABEL: Record<string, string> = { W: 'V', D: 'E', L: 'D' };
+
+/** Lista de jogos da competição (copas), fonte dos agregados quando não há tabela. */
+function CupGames({ raw }: { raw: unknown }) {
+  const games = (raw as { schedule?: ScheduleGame[] } | null)?.schedule;
+  if (!games?.length) return null;
+  return (
+    <details className="mt-3">
+      <summary className="cursor-pointer text-sm text-gray-500">Jogos ({games.length})</summary>
+      <table className="mt-2 w-full text-sm">
+        <tbody>
+          {games.map((g, i) => (
+            <tr key={i} className="border-t">
+              <td className="py-1 pr-2 text-gray-500">{g.date.slice(0, 10)}</td>
+              <td className="py-1 pr-2 text-gray-500">{g.homeAway === 'home' ? 'Casa' : 'Fora'}</td>
+              <td className="py-1 pr-2">{g.opponent}</td>
+              <td className="py-1 pr-2 tabular-nums">{g.gf}–{g.ga}</td>
+              <td className="py-1 font-medium">{RESULT_LABEL[g.result]}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
   );
 }
 
@@ -454,8 +523,12 @@ type EspnCategory = { name: string; stats: EspnStat[] };
 
 /** Tabelas de estatísticas detalhadas da ESPN, agrupadas por categoria com rótulos PT. */
 function DetailedStats({ raw }: { raw: unknown }) {
-  const cats = ((raw as { statistics?: EspnCategory[] } | null)?.statistics ?? []).filter((c) => c.stats?.length);
+  const data = raw as { statistics?: EspnCategory[]; schedule?: unknown[] } | null;
+  const cats = (data?.statistics ?? []).filter((c) => c.stats?.length);
   if (!cats.length) return null;
+  // Em copas (tem schedule) escondemos também as métricas de gol/resultado, que vêm erradas.
+  const isCup = Array.isArray(data?.schedule);
+  const hidden = isCup ? new Set([...HIDDEN_STATS, ...CUP_HIDDEN_STATS]) : HIDDEN_STATS;
   const ordered = [...cats].sort(
     (a, b) => (CATEGORY_ORDER.indexOf(a.name) + 1 || 99) - (CATEGORY_ORDER.indexOf(b.name) + 1 || 99),
   );
@@ -465,7 +538,7 @@ function DetailedStats({ raw }: { raw: unknown }) {
       <summary className="cursor-pointer text-sm text-gray-500">Estatísticas detalhadas (ESPN)</summary>
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         {ordered.map((cat) => {
-          const stats = cat.stats.filter((s) => !HIDDEN_STATS.has(s.name));
+          const stats = cat.stats.filter((s) => !hidden.has(s.name));
           if (!stats.length) return null;
           return (
             <div key={cat.name}>

@@ -33,6 +33,12 @@ export const HIDDEN_STATS = new Set([
   'savePct', // ESPN devolve fora de escala (~0,2%); enganoso
 ]);
 
+// Em copas (mata-mata), o feed de statistics traz V/E/D pelo resultado do
+// CONFRONTO (pênaltis), não por jogo — contradiz o cabeçalho (que vem do
+// schedule, por partida) — e cleanSheet vem absurdo. O resto (gols, contagens)
+// é confiável. Escondemos só esses para não conflitar com os agregados reais.
+export const CUP_HIDDEN_STATS = new Set(['wins', 'draws', 'losses', 'winPct', 'cleanSheet']);
+
 // Métricas mostradas como porcentagem.
 export const PCT_STATS = new Set(['goalConversion']);
 
