@@ -494,7 +494,7 @@ function SeasonStatsCard({ r }: { r: Record<string, unknown> }) {
         </tbody>
       </table>
       <DetailedStats raw={r.raw} />
-      <CupGames raw={r.raw} />
+      <GamesList raw={r.raw} />
     </div>
   );
 }
@@ -502,8 +502,8 @@ function SeasonStatsCard({ r }: { r: Record<string, unknown> }) {
 type ScheduleGame = { date: string; homeAway: 'home' | 'away'; gf: number; ga: number; opponent: string; result: 'W' | 'D' | 'L' };
 const RESULT_LABEL: Record<string, string> = { W: 'V', D: 'E', L: 'D' };
 
-/** Lista de jogos da competição (copas), fonte dos agregados quando não há tabela. */
-function CupGames({ raw }: { raw: unknown }) {
+/** Lista de jogos encerrados da competição (ligas e copas). */
+function GamesList({ raw }: { raw: unknown }) {
   const games = (raw as { schedule?: ScheduleGame[] } | null)?.schedule;
   if (!games?.length) return null;
   return (
@@ -607,11 +607,11 @@ type EspnCategory = { name: string; stats: EspnStat[] };
 
 /** Tabelas de estatísticas detalhadas da ESPN, agrupadas por categoria com rótulos PT. */
 function DetailedStats({ raw }: { raw: unknown }) {
-  const data = raw as { statistics?: EspnCategory[]; schedule?: unknown[] } | null;
+  const data = raw as { statistics?: EspnCategory[]; record?: unknown } | null;
   const cats = (data?.statistics ?? []).filter((c) => c.stats?.length);
   if (!cats.length) return null;
-  // Em copas (tem schedule) escondemos também as métricas de gol/resultado, que vêm erradas.
-  const isCup = Array.isArray(data?.schedule);
+  // Copa não tem `record` (sem tabela). Lá escondemos V/E/D e cleanSheet (vêm errados).
+  const isCup = data?.record == null;
   const hidden = isCup ? new Set([...HIDDEN_STATS, ...CUP_HIDDEN_STATS]) : HIDDEN_STATS;
   const ordered = [...cats].sort(
     (a, b) => (CATEGORY_ORDER.indexOf(a.name) + 1 || 99) - (CATEGORY_ORDER.indexOf(b.name) + 1 || 99),

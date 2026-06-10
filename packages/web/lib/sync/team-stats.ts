@@ -71,6 +71,12 @@ export async function syncTeamSeasonStats(season = CURRENT_SEASON): Promise<Team
         } catch {
           st = null;
         }
+        let leagueGames: EspnScheduleGame[] = [];
+        try {
+          leagueGames = await fetchEspnTeamSchedule(espnSlug, espnId, season);
+        } catch {
+          leagueGames = [];
+        }
         const s = rec.stats;
         const n = (k: string) => (typeof s[k] === 'number' ? s[k] : null);
         rows.push({
@@ -97,7 +103,7 @@ export async function syncTeamSeasonStats(season = CURRENT_SEASON): Promise<Team
           away_gf: n('awayPointsFor'),
           away_ga: n('awayPointsAgainst'),
           clean_sheets: st ? (st.stats.cleanSheet ?? null) : null,
-          raw: { record: rec.raw, statistics: st?.raw ?? null },
+          raw: { record: rec.raw, statistics: st?.raw ?? null, schedule: leagueGames },
         });
         continue;
       }

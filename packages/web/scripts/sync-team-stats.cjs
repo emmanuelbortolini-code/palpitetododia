@@ -102,6 +102,7 @@ async function main() {
 
       if (rec) {
         const st = await teamSeasonStats(espnSlug, SEASON, espnId);
+        const leagueGames = await teamSchedule(espnSlug, espnId, SEASON);
         const v = rec.stats;
         const n = (k) => (typeof v[k] === 'number' ? v[k] : null);
         rows.push({
@@ -113,7 +114,7 @@ async function main() {
           away_played: n('awayGamesPlayed'), away_wins: n('awayWins'), away_draws: n('awayTies'),
           away_losses: n('awayLosses'), away_gf: n('awayPointsFor'), away_ga: n('awayPointsAgainst'),
           clean_sheets: st ? (st.stats.cleanSheet ?? null) : null,
-          raw: { record: rec.raw, statistics: st ? st.raw : null },
+          raw: { record: rec.raw, statistics: st ? st.raw : null, schedule: leagueGames },
         });
         continue;
       }
