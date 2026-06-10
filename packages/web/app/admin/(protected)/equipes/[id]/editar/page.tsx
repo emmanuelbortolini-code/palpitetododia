@@ -9,7 +9,7 @@ import { fetchEspnTeamDetail } from '@/lib/espn';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'atual' | 'apelido' | 'temporada' | 'espn' | 'football';
+type Tab = 'atual' | 'apelido' | 'temporada' | 'estatisticas' | 'espn' | 'football';
 type SearchParams = { tab?: string; q?: string };
 
 const FORM_COLS =
@@ -82,7 +82,7 @@ export default async function EditarEquipePage({
   if (!team) notFound();
 
   const t = team as Record<string, unknown>;
-  const tab: Tab = ['apelido', 'temporada', 'espn', 'football'].includes(searchParams.tab ?? '')
+  const tab: Tab = ['apelido', 'temporada', 'estatisticas', 'espn', 'football'].includes(searchParams.tab ?? '')
     ? (searchParams.tab as Tab)
     : 'atual';
 
@@ -121,6 +121,7 @@ export default async function EditarEquipePage({
         <TabLink to="atual">Dados Atuais</TabLink>
         <TabLink to="apelido">Apelido</TabLink>
         <TabLink to="temporada">Temporada</TabLink>
+        <TabLink to="estatisticas">Estatísticas</TabLink>
         <TabLink to="espn">ESPN API</TabLink>
         <TabLink to="football">FOOTBALL API</TabLink>
       </div>
@@ -138,6 +139,8 @@ export default async function EditarEquipePage({
       )}
 
       {tab === 'temporada' && <SeasonTab teamId={params.id} supabase={supabase} />}
+
+      {tab === 'estatisticas' && <StatsTab teamId={params.id} supabase={supabase} />}
 
       {(tab === 'espn' || tab === 'football') && (
         <ProviderTab
@@ -362,6 +365,95 @@ async function SeasonTab({
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+async function StatsTab({
+  teamId,
+  supabase,
+}: {
+  teamId: string;
+  supabase: ReturnType<typeof createAdminClient>;
+}) {
+  const { data } = await supabase
+    .from('team_season_stats')
+    .select('*, league:league_id(name)')
+    .eq('team_id', teamId)
+    .order('season', { ascending: false });
+  const rows = (data ?? []) as Record<string, unknown>[];
+
+  if (!rows.length) {
+    return (
+      <div className="rounded border p-4">
+        <p className="text-sm text-gray-500">
+          Sem estatísticas de temporada. Rode “Sincronizar Estatísticas de Temporada (ESPN)” em /admin/jogos.
+        </p>
+      </div>
+    );
+  }
+
+  // Linha de tabela com J/V/E/D/GP/GC por recorte (geral, casa, fora).
+  const num = (v: unknown) => (typeof v === 'number' ? v : '—');
+  const Split = ({ label, p, r }: { label: string; p: string; r: Record<string, unknown> }) => (
+    <tr className="border-t">
+      <td className="py-1.5 pr-3 font-medium">{label}</td>
+      <td className="py-1.5 text-center">{num(r[`${p}played`])}</td>
+      <td className="py-1.5 text-center">{num(r[`${p}wins`])}</td>
+      <td className="py-1.5 text-center">{num(r[`${p}draws`])}</td>
+      <td className="py-1.5 text-center">{num(r[`${p}losses`])}</td>
+      <td className="py-1.5 text-center">{num(r[`${p}gf`])}</td>
+      <td className="py-1.5 text-center">{num(r[`${p}ga`])}</td>
+    </tr>
+  );
+
+  return (
+    <div className="flex flex-col gap-5">
+      {rows.map((r, idx) => {
+        const league = (r.league as unknown as { name: string } | null)?.name ?? '—';
+        const flat = flatten(r.raw).filter(([k]) => !k.startsWith('record'));
+        return (
+          <div key={idx} className="rounded border p-4">
+            <div className="mb-3 flex items-baseline justify-between">
+              <p className="font-medium">
+                {league} <span className="text-gray-500">{r.season as number}</span>
+              </p>
+              <p className="text-sm text-gray-500">
+                {r.rank ? `${r.rank as number}º` : ''} · {r.points as number} pts ·{' '}
+                {r.clean_sheets != null ? `${r.clean_sheets as number} CS` : ''}
+              </p>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-gray-500">
+                  <th className="py-1 text-left font-medium"></th>
+                  <th className="py-1 font-medium">J</th>
+                  <th className="py-1 font-medium">V</th>
+                  <th className="py-1 font-medium">E</th>
+                  <th className="py-1 font-medium">D</th>
+                  <th className="py-1 font-medium">GP</th>
+                  <th className="py-1 font-medium">GC</th>
+                </tr>
+              </thead>
+              <tbody>
+                <Split label="Geral" p="" r={r} />
+                <Split label="Casa" p="home_" r={r} />
+                <Split label="Fora" p="away_" r={r} />
+              </tbody>
+            </table>
+            {flat.length > 0 && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm text-gray-500">Estatísticas detalhadas (ESPN)</summary>
+                <dl className="mt-2 grid grid-cols-[200px_1fr] gap-y-1 text-sm">
+                  {flat.map(([key, value]) => (
+                    <FieldRow key={key} label={key} value={value} />
+                  ))}
+                </dl>
+              </details>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

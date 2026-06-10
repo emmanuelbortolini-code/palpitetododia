@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStaff } from '@/lib/auth/staff';
 import { SyncButton } from '@/components/admin/sync-button';
 import { MatchStatsButton } from '@/components/admin/match-stats-button';
+import { TeamStatsButton } from '@/components/admin/team-stats-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,6 +83,7 @@ export default async function AdminMatchesPage({
       <div className="mb-6 flex flex-col gap-3 rounded border p-4">
         <SyncButton />
         <MatchStatsButton />
+        <TeamStatsButton />
       </div>
 
       <div className="mb-4 flex gap-1 border-b">

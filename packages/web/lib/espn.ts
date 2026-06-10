@@ -90,6 +90,43 @@ export async function fetchEspnStandings(slug: string): Promise<EspnStanding[]> 
     .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
 }
 
+// Record (total + splits casa/fora) de um time na temporada atual. O endpoint do
+// time por liga traz tudo num item `total`: rank, V/E/D, GF/GA e os pares
+// home*/away* (homeWins, awayPointsFor, etc.).
+export type EspnTeamRecord = { stats: Record<string, number>; raw: unknown } | null;
+
+export async function fetchEspnTeamRecord(slug: string, teamId: string): Promise<EspnTeamRecord> {
+  const res = await fetch(`${ESPN_BASE}/${slug}/teams/${teamId}`, { cache: 'no-store' });
+  if (!res.ok) return null;
+  const j: any = await res.json();
+  const items: any[] = j?.team?.record?.items ?? [];
+  const total = items.find((it) => it.type === 'total') ?? items[0];
+  if (!total) return null;
+  const stats: Record<string, number> = {};
+  for (const s of total.stats ?? []) if (typeof s.value === 'number') stats[s.name] = s.value;
+  return { stats, raw: items };
+}
+
+// Estatísticas agregadas do time na temporada (categorias defensive/general/
+// goalKeeping/offensive). Usado para clean sheets + o blob bruto.
+export type EspnTeamSeasonStats = { cleanSheets: number | null; raw: unknown } | null;
+
+export async function fetchEspnTeamSeasonStats(
+  slug: string,
+  season: number,
+  teamId: string,
+): Promise<EspnTeamSeasonStats> {
+  const url = `https://sports.core.api.espn.com/v2/sports/soccer/leagues/${slug}/seasons/${season}/types/1/teams/${teamId}/statistics`;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) return null;
+  const j: any = await res.json();
+  const cats: any[] = j?.splits?.categories ?? [];
+  const find = (cat: string, name: string) =>
+    cats.find((c) => c.name === cat)?.stats?.find((s: any) => s.name === name)?.value ?? null;
+  const cs = find('goalKeeping', 'cleanSheet');
+  return { cleanSheets: typeof cs === 'number' ? cs : null, raw: cats };
+}
+
 // ── Jogos (scoreboard) ──────────────────────────────────────────────────────
 
 export type EspnEvent = {
