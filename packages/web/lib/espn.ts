@@ -168,6 +168,93 @@ export async function fetchEspnTeamSchedule(slug: string, teamId: string, season
   return out;
 }
 
+// Artilheiros / líderes de estatística de uma competição na temporada (ESPN
+// leaders). Mescla as categorias por atleta e resolve o nome (athlete.$ref).
+export type EspnLeaderPlayer = {
+  athleteId: string;
+  name: string;
+  position: string | null;
+  teamEspnId: string | null;
+  goals: number | null;
+  assists: number | null;
+  shots: number | null;
+  shotsOnTarget: number | null;
+  yellow: number | null;
+  red: number | null;
+  fouls: number | null;
+  saves: number | null;
+};
+
+// categoria ESPN do leaders -> campo do jogador.
+const LEADER_CAT_FIELD: Record<string, keyof EspnLeaderPlayer> = {
+  goals: 'goals',
+  assists: 'assists',
+  totalShots: 'shots',
+  shotsOnTarget: 'shotsOnTarget',
+  yellowCards: 'yellow',
+  redCards: 'red',
+  foulsCommitted: 'fouls',
+  saves: 'saves',
+};
+
+export async function fetchEspnLeaders(slug: string, season: number): Promise<EspnLeaderPlayer[]> {
+  const url = `https://sports.core.api.espn.com/v2/sports/soccer/leagues/${slug}/seasons/${season}/types/1/leaders`;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) return [];
+  const j: any = await res.json();
+  const idFrom = (ref: string | undefined, kind: string) => {
+    const m = new RegExp(`${kind}/(\\d+)`).exec(ref ?? '');
+    return m ? m[1] : null;
+  };
+
+  const byId = new Map<string, EspnLeaderPlayer>();
+  for (const cat of j?.categories ?? []) {
+    const field = LEADER_CAT_FIELD[cat.name];
+    if (!field) continue;
+    for (const ld of cat.leaders ?? []) {
+      const aid = idFrom(ld.athlete?.$ref, 'athletes');
+      if (!aid) continue;
+      let p = byId.get(aid);
+      if (!p) {
+        p = {
+          athleteId: aid,
+          name: '',
+          position: null,
+          teamEspnId: idFrom(ld.team?.$ref, 'teams'),
+          goals: null, assists: null, shots: null, shotsOnTarget: null,
+          yellow: null, red: null, fouls: null, saves: null,
+        };
+        byId.set(aid, p);
+      }
+      if (typeof ld.value === 'number') (p[field] as number) = ld.value;
+      if (!p.teamEspnId) p.teamEspnId = idFrom(ld.team?.$ref, 'teams');
+    }
+  }
+
+  // Resolve nomes em lotes (um fetch por atleta), sem estourar a API.
+  const players = [...byId.values()];
+  for (let i = 0; i < players.length; i += 12) {
+    const chunk = players.slice(i, i + 12);
+    await Promise.all(
+      chunk.map(async (p) => {
+        try {
+          const ar = await fetch(
+            `https://sports.core.api.espn.com/v2/sports/soccer/leagues/${slug}/seasons/${season}/athletes/${p.athleteId}?lang=en&region=us`,
+            { cache: 'no-store' },
+          );
+          if (!ar.ok) return;
+          const a: any = await ar.json();
+          p.name = a.displayName ?? a.fullName ?? '';
+          p.position = a.position?.abbreviation ?? null;
+        } catch {
+          /* mantém vazio */
+        }
+      }),
+    );
+  }
+  return players;
+}
+
 // ── Jogos (scoreboard) ──────────────────────────────────────────────────────
 
 export type EspnEvent = {

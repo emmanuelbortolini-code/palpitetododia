@@ -7,8 +7,10 @@ import { updateLeague, linkProviderLeague, unlinkProviderLeague, type LeagueSour
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'atual' | 'espn' | 'football';
+type Tab = 'atual' | 'artilheiros' | 'espn' | 'football';
 type SearchParams = { tab?: string; q?: string };
+
+const CURRENT_SEASON = new Date().getFullYear();
 
 const FORM_COLS =
   'id, name, name_en, name_es, slug, slug_en, slug_es, country_id, logo_url, gender_en, gender_br, gender_es, nicknames_pt, nicknames_en, nicknames_es';
@@ -34,7 +36,9 @@ export default async function EditarLigaPage({
   if (!league) notFound();
 
   const l = league as Record<string, unknown>;
-  const tab: Tab = searchParams.tab === 'espn' || searchParams.tab === 'football' ? searchParams.tab : 'atual';
+  const tab: Tab = ['artilheiros', 'espn', 'football'].includes(searchParams.tab ?? '')
+    ? (searchParams.tab as Tab)
+    : 'atual';
 
   const providerOf = (source: LeagueSource) => {
     const src = SRC[source];
@@ -65,6 +69,7 @@ export default async function EditarLigaPage({
 
       <div className="mb-5 flex gap-1 border-b">
         <TabLink to="atual">Dados Atuais</TabLink>
+        <TabLink to="artilheiros">Artilheiros</TabLink>
         <TabLink to="espn">Dados ESPN</TabLink>
         <TabLink to="football">Dados Football API</TabLink>
       </div>
@@ -72,6 +77,8 @@ export default async function EditarLigaPage({
       {tab === 'atual' && (
         <LeagueForm action={updateLeague.bind(null, league.id as string)} countries={countries ?? []} defaultValues={league as never} />
       )}
+
+      {tab === 'artilheiros' && <ArtilheirosTab leagueId={params.id} supabase={supabase} />}
 
       {(tab === 'espn' || tab === 'football') && (
         <ProviderTab
@@ -150,6 +157,77 @@ async function ProviderTab({
           </form>
         ))}
       </div>
+    </div>
+  );
+}
+
+async function ArtilheirosTab({
+  leagueId,
+  supabase,
+}: {
+  leagueId: string;
+  supabase: ReturnType<typeof createAdminClient>;
+}) {
+  const { data } = await supabase
+    .from('player_season_stats')
+    .select('player_name, position, goals, assists, shots, shots_on_target, yellow, red, team:team_id(name)')
+    .eq('league_id', leagueId)
+    .eq('season', CURRENT_SEASON);
+  const players = (data ?? []) as Record<string, unknown>[];
+  // Artilheiros: ordena por gols, depois assistências.
+  const ranked = players
+    .filter((p) => (p.goals as number | null) != null)
+    .sort((a, b) => (b.goals as number) - (a.goals as number) || ((b.assists as number) ?? 0) - ((a.assists as number) ?? 0));
+
+  if (!ranked.length) {
+    return (
+      <div className="rounded border p-4">
+        <p className="text-sm text-gray-500">
+          Sem artilheiros. Rode “Sincronizar Artilheiros (ESPN)” em /admin/jogos.
+        </p>
+      </div>
+    );
+  }
+
+  const cell = (v: unknown) => (typeof v === 'number' ? v : '—');
+  return (
+    <div className="rounded border p-4">
+      <p className="mb-3 text-sm text-gray-500">Artilheiros · {CURRENT_SEASON} ({ranked.length})</p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-gray-500">
+            <th className="py-1 pr-1">#</th>
+            <th className="py-1">Jogador</th>
+            <th className="py-1">Time</th>
+            <th className="py-1 text-center">G</th>
+            <th className="py-1 text-center">A</th>
+            <th className="py-1 text-center">Fin</th>
+            <th className="py-1 text-center">No alvo</th>
+            <th className="py-1 text-center">CA</th>
+            <th className="py-1 text-center">CV</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ranked.map((p, i) => (
+            <tr key={i} className="border-t">
+              <td className="py-1 pr-1 text-gray-500">{i + 1}</td>
+              <td className="py-1">
+                {(p.player_name as string) ?? '—'}
+                {p.position ? <span className="ml-1 text-xs text-gray-400">{p.position as string}</span> : null}
+              </td>
+              <td className="py-1 text-gray-600 dark:text-gray-300">
+                {(p.team as unknown as { name: string } | null)?.name ?? '—'}
+              </td>
+              <td className="py-1 text-center font-medium">{cell(p.goals)}</td>
+              <td className="py-1 text-center">{cell(p.assists)}</td>
+              <td className="py-1 text-center">{cell(p.shots)}</td>
+              <td className="py-1 text-center">{cell(p.shots_on_target)}</td>
+              <td className="py-1 text-center">{cell(p.yellow)}</td>
+              <td className="py-1 text-center">{cell(p.red)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

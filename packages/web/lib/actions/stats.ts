@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireStaff } from '@/lib/auth/staff';
 import { syncMatchStats } from '@/lib/sync/stats';
 import { syncTeamSeasonStats } from '@/lib/sync/team-stats';
+import { syncPlayerSeasonStats } from '@/lib/sync/player-stats';
 
 export type ActionState = { error?: string; message?: string };
 
@@ -32,5 +33,17 @@ export async function syncTeamSeasonStatsAction(_prev: ActionState, _formData: F
     };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Erro ao sincronizar estatísticas de temporada.' };
+  }
+}
+
+/** Sincroniza os artilheiros/líderes por jogador (ESPN) para player_season_stats. */
+export async function syncPlayerSeasonStatsAction(_prev: ActionState, _formData: FormData): Promise<ActionState> {
+  await requireStaff(['admin']);
+  try {
+    const r = await syncPlayerSeasonStats();
+    revalidatePath('/admin/jogos');
+    return { message: `${r.updated} jogadores salvos em ${r.leagues} competição(ões).` };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Erro ao sincronizar artilheiros.' };
   }
 }
