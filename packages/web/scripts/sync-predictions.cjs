@@ -19,6 +19,8 @@ const SEASON = new Date().getFullYear();
 const RHO = -0.13;
 const MAX_GOALS = 10;
 const HALF_LIFE = 120;
+const SHRINKAGE_K = 8;
+const shrink = (ratio, n, k) => 1 + (ratio - 1) * (n / (n + k));
 
 function loadEnv() {
   const env = fs.readFileSync(path.join(__dirname, '..', '.env.local'), 'utf8');
@@ -50,8 +52,8 @@ function buildWeightedModel(teams, now) {
     }
     if (hw === 0 || aw === 0) continue;
     map.set(t.teamId, {
-      attackHome: hgf / hw / muHome, defenseHome: hga / hw / muAway,
-      attackAway: agf / aw / muAway, defenseAway: aga / aw / muHome,
+      attackHome: shrink(hgf / hw / muHome, hw, SHRINKAGE_K), defenseHome: shrink(hga / hw / muAway, hw, SHRINKAGE_K),
+      attackAway: shrink(agf / aw / muAway, aw, SHRINKAGE_K), defenseAway: shrink(aga / aw / muHome, aw, SHRINKAGE_K),
     });
   }
   if (!map.size) return null;
