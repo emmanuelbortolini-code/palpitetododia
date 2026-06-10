@@ -80,8 +80,25 @@ export type MatchProbabilities = {
 
 const MAX_GOALS = 10;
 
-/** Probabilidades de um confronto a partir do modelo da liga. */
-export function matchProbabilities(model: LeagueModel, homeTeamId: string, awayTeamId: string): MatchProbabilities | null {
+// Correção Dixon-Coles: ajusta a dependência nos placares baixos (mais 0-0/1-1,
+// menos 1-0/0-1) que o Poisson independente erra. rho típico ~ -0.1; rho=0 = Poisson puro.
+const RHO = -0.13;
+
+function tau(i: number, j: number, lh: number, la: number, rho: number): number {
+  if (i === 0 && j === 0) return 1 - lh * la * rho;
+  if (i === 0 && j === 1) return 1 + lh * rho;
+  if (i === 1 && j === 0) return 1 + la * rho;
+  if (i === 1 && j === 1) return 1 - rho;
+  return 1;
+}
+
+/** Probabilidades de um confronto (Poisson com correção Dixon-Coles) a partir do modelo da liga. */
+export function matchProbabilities(
+  model: LeagueModel,
+  homeTeamId: string,
+  awayTeamId: string,
+  rho = RHO,
+): MatchProbabilities | null {
   const h = model.teams.get(homeTeamId);
   const a = model.teams.get(awayTeamId);
   if (!h || !a) return null;
@@ -92,6 +109,18 @@ export function matchProbabilities(model: LeagueModel, homeTeamId: string, awayT
   const ph = Array.from({ length: MAX_GOALS + 1 }, (_, k) => poisson(k, lambdaHome));
   const pa = Array.from({ length: MAX_GOALS + 1 }, (_, k) => poisson(k, lambdaAway));
 
+  // Matriz de placares com o ajuste tau; normaliza pois tau (e o truncamento) tira a soma de 1.
+  const grid: number[][] = [];
+  let total = 0;
+  for (let i = 0; i <= MAX_GOALS; i++) {
+    grid[i] = [];
+    for (let j = 0; j <= MAX_GOALS; j++) {
+      const p = ph[i] * pa[j] * tau(i, j, lambdaHome, lambdaAway, rho);
+      grid[i][j] = p;
+      total += p;
+    }
+  }
+
   let homeWin = 0;
   let draw = 0;
   let awayWin = 0;
@@ -100,7 +129,7 @@ export function matchProbabilities(model: LeagueModel, homeTeamId: string, awayT
   let topScore = { home: 0, away: 0, p: 0 };
   for (let i = 0; i <= MAX_GOALS; i++) {
     for (let j = 0; j <= MAX_GOALS; j++) {
-      const p = ph[i] * pa[j];
+      const p = grid[i][j] / total;
       if (i > j) homeWin += p;
       else if (i === j) draw += p;
       else awayWin += p;
