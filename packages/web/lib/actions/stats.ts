@@ -5,6 +5,7 @@ import { requireStaff } from '@/lib/auth/staff';
 import { syncMatchStats } from '@/lib/sync/stats';
 import { syncTeamSeasonStats } from '@/lib/sync/team-stats';
 import { syncPlayerSeasonStats } from '@/lib/sync/player-stats';
+import { syncPredictions } from '@/lib/sync/predictions';
 
 export type ActionState = { error?: string; message?: string };
 
@@ -45,5 +46,18 @@ export async function syncPlayerSeasonStatsAction(_prev: ActionState, _formData:
     return { message: `${r.updated} jogadores salvos em ${r.leagues} competição(ões).` };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Erro ao sincronizar artilheiros.' };
+  }
+}
+
+/** Grava previsões pré-jogo dos próximos jogos e pontua os encerrados (calibração). */
+export async function syncPredictionsAction(_prev: ActionState, _formData: FormData): Promise<ActionState> {
+  await requireStaff(['admin']);
+  try {
+    const r = await syncPredictions();
+    revalidatePath('/admin/jogos');
+    revalidatePath('/admin/probabilidades/calibracao');
+    return { message: `${r.predicted} previsões gravadas, ${r.scored} jogos pontuados.` };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Erro ao gerar previsões.' };
   }
 }

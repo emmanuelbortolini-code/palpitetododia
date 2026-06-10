@@ -71,7 +71,12 @@ export default async function ProbabilidadesPage() {
 
   return (
     <main className="mx-auto max-w-4xl p-6">
-      <h1 className="mb-2 text-2xl font-bold">Probabilidades</h1>
+      <div className="mb-2 flex items-baseline justify-between">
+        <h1 className="text-2xl font-bold">Probabilidades</h1>
+        <a href="/admin/probabilidades/calibracao" className="text-sm text-blue-600 hover:underline">
+          Calibração →
+        </a>
+      </div>
       <p className="mb-4 text-sm text-gray-500">
         Poisson + Dixon-Coles por mando, com ponderação por recência (jogos recentes pesam mais) na temporada{' '}
         {CURRENT_SEASON}. Próximos jogos das ligas com tabela; forma = últimos 5 (mais recente à esquerda).

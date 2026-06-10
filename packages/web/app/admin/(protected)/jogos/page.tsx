@@ -5,6 +5,7 @@ import { SyncButton } from '@/components/admin/sync-button';
 import { MatchStatsButton } from '@/components/admin/match-stats-button';
 import { TeamStatsButton } from '@/components/admin/team-stats-button';
 import { PlayerStatsButton } from '@/components/admin/player-stats-button';
+import { PredictionsButton } from '@/components/admin/predictions-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,6 +87,7 @@ export default async function AdminMatchesPage({
         <MatchStatsButton />
         <TeamStatsButton />
         <PlayerStatsButton />
+        <PredictionsButton />
       </div>
 
       <div className="mb-4 flex gap-1 border-b">
