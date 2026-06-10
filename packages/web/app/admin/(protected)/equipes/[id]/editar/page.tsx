@@ -6,7 +6,7 @@ import { TeamForm } from '@/components/admin/team-form';
 import { NicknamesForm } from '@/components/admin/nicknames-form';
 import { updateTeam, updateNicknames, linkProvider, unlinkProvider, type Source } from '@/lib/actions/teams';
 import { fetchEspnTeamDetail } from '@/lib/espn';
-import { CATEGORY_LABEL, CATEGORY_ORDER, HIDDEN_STATS, CUP_HIDDEN_STATS, STAT_LABEL, formatStatValue } from '@/lib/stat-labels';
+import { CATEGORY_LABEL, CATEGORY_ORDER, HIDDEN_STATS, CUP_HIDDEN_STATS, PCT_STATS, STAT_LABEL, formatStatValue } from '@/lib/stat-labels';
 
 export const dynamic = 'force-dynamic';
 
@@ -598,7 +598,62 @@ function ConsolidatedCard({ rows }: { rows: Record<string, unknown>[] }) {
           <Row label="Fora" p="away_" />
         </tbody>
       </table>
+
+      <ConsolidatedDetailed rows={rows} />
     </div>
+  );
+}
+
+/**
+ * Estatísticas detalhadas somadas entre as competições. Só contagens são somáveis;
+ * porcentagens/médias (não aditivas) e métricas quebradas em copa ficam de fora.
+ */
+function ConsolidatedDetailed({ rows }: { rows: Record<string, unknown>[] }) {
+  const skip = new Set([...HIDDEN_STATS, ...CUP_HIDDEN_STATS]);
+  const isPctOrAvg = (n: string) => n.endsWith('Pct') || PCT_STATS.has(n) || n.startsWith('avg');
+
+  // category -> (statName -> soma)
+  const totals = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    const cats = (r.raw as { statistics?: EspnCategory[] } | null)?.statistics ?? [];
+    for (const c of cats) {
+      for (const s of c.stats ?? []) {
+        if (skip.has(s.name) || isPctOrAvg(s.name) || typeof s.value !== 'number') continue;
+        let m = totals.get(c.name);
+        if (!m) totals.set(c.name, (m = new Map()));
+        m.set(s.name, (m.get(s.name) ?? 0) + s.value);
+      }
+    }
+  }
+  const cats = [...totals.keys()].sort(
+    (a, b) => (CATEGORY_ORDER.indexOf(a) + 1 || 99) - (CATEGORY_ORDER.indexOf(b) + 1 || 99),
+  );
+  if (!cats.length) return null;
+
+  return (
+    <details className="mt-4">
+      <summary className="cursor-pointer text-sm text-gray-500">Estatísticas detalhadas (ESPN) — soma das competições</summary>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        {cats.map((cat) => {
+          const entries = [...totals.get(cat)!.entries()];
+          return (
+            <div key={cat}>
+              <p className="mb-1 text-sm font-medium">{CATEGORY_LABEL[cat] ?? cat}</p>
+              <table className="w-full text-sm">
+                <tbody>
+                  {entries.map(([name, value]) => (
+                    <tr key={name} className="border-t">
+                      <td className="py-1 pr-3 text-gray-600 dark:text-gray-300">{STAT_LABEL[name] ?? name}</td>
+                      <td className="py-1 text-right tabular-nums">{value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+      </div>
+    </details>
   );
 }
 
