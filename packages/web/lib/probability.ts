@@ -59,6 +59,58 @@ export function buildLeagueModel(rows: StatsRow[]): LeagueModel | null {
   return { muHome, muAway, teams };
 }
 
+export type Game = { date: string; homeAway: 'home' | 'away'; gf: number; ga: number };
+
+/**
+ * Modelo da liga com ponderação por recência (decaimento exponencial por meia-vida
+ * em dias): jogos recentes pesam mais. Usa o schedule de cada time. Cai p/ null se
+ * não houver amostra suficiente (a página então usa o modelo agregado).
+ */
+export function buildWeightedLeagueModel(
+  teams: { teamId: string; games: Game[] }[],
+  halfLifeDays = 120,
+  now = Date.now(),
+): LeagueModel | null {
+  const weight = (date: string) => {
+    const ageDays = (now - Date.parse(date)) / 86_400_000;
+    return Number.isFinite(ageDays) ? 0.5 ** (Math.max(0, ageDays) / halfLifeDays) : 1;
+  };
+
+  // Médias da liga (ponderadas): gols do mandante e do visitante por jogo.
+  let hGoals = 0, hW = 0, aGoals = 0, aW = 0;
+  for (const t of teams) {
+    for (const g of t.games) {
+      const w = weight(g.date);
+      if (g.homeAway === 'home') { hGoals += w * g.gf; hW += w; }
+      else { aGoals += w * g.gf; aW += w; }
+    }
+  }
+  if (hW === 0 || aW === 0) return null;
+  const muHome = hGoals / hW;
+  const muAway = aGoals / aW;
+  if (muHome <= 0 || muAway <= 0) return null;
+
+  const teamMap = new Map<string, TeamRates>();
+  for (const t of teams) {
+    let hgf = 0, hga = 0, hw = 0, agf = 0, aga = 0, aw = 0;
+    for (const g of t.games) {
+      const w = weight(g.date);
+      if (g.homeAway === 'home') { hgf += w * g.gf; hga += w * g.ga; hw += w; }
+      else { agf += w * g.gf; aga += w * g.ga; aw += w; }
+    }
+    if (hw === 0 || aw === 0) continue;
+    teamMap.set(t.teamId, {
+      teamId: t.teamId,
+      attackHome: hgf / hw / muHome,
+      defenseHome: hga / hw / muAway,
+      attackAway: agf / aw / muAway,
+      defenseAway: aga / aw / muHome,
+    });
+  }
+  if (!teamMap.size) return null;
+  return { muHome, muAway, teams: teamMap };
+}
+
 const factorial = (n: number) => {
   let f = 1;
   for (let i = 2; i <= n; i++) f *= i;
