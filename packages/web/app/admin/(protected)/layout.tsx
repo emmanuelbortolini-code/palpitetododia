@@ -23,6 +23,7 @@ export default async function AdminLayout({
     ...(staff.role === 'admin'
       ? [
           { href: '/admin/jogos', label: 'Jogos' },
+          { href: '/admin/probabilidades', label: 'Probabilidades' },
           { href: '/admin/equipes', label: 'Equipes' },
           { href: '/admin/ligas', label: 'Ligas' },
         ]
