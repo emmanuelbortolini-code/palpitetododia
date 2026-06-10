@@ -406,31 +406,39 @@ async function StatsTab({
       leagues.push({ id, name: (r.league as unknown as { name: string } | null)?.name ?? '—' });
     }
   }
-  const selected = leagues.some((l) => l.id === comp) ? comp : leagues[0].id;
-  const shown = rows.filter((r) => (r.league_id as string) === selected);
+  // Com mais de uma competição, oferece a sub-aba "Consolidado" (soma de todas).
+  const tabs =
+    leagues.length > 1 ? [...leagues, { id: 'consolidado', name: 'Consolidado' }] : leagues;
+  const selected = tabs.some((t) => t.id === comp) ? comp : tabs[0].id;
 
   return (
     <div>
-      {leagues.length > 1 && (
+      {tabs.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-1 border-b">
-          {leagues.map((l) => (
+          {tabs.map((t) => (
             <Link
-              key={l.id}
-              href={`/admin/equipes/${teamId}/editar?tab=estatisticas&comp=${l.id}`}
+              key={t.id}
+              href={`/admin/equipes/${teamId}/editar?tab=estatisticas&comp=${t.id}`}
               className={`border-b-2 px-3 py-1.5 text-sm ${
-                l.id === selected ? 'border-blue-600 font-medium text-blue-600' : 'border-transparent text-gray-500'
+                t.id === selected ? 'border-blue-600 font-medium text-blue-600' : 'border-transparent text-gray-500'
               }`}
             >
-              {l.name}
+              {t.name}
             </Link>
           ))}
         </div>
       )}
-      <div className="flex flex-col gap-5">
-        {shown.map((r, idx) => (
-          <SeasonStatsCard key={idx} r={r} />
-        ))}
-      </div>
+      {selected === 'consolidado' ? (
+        <ConsolidatedCard rows={rows} />
+      ) : (
+        <div className="flex flex-col gap-5">
+          {rows
+            .filter((r) => (r.league_id as string) === selected)
+            .map((r, idx) => (
+              <SeasonStatsCard key={idx} r={r} />
+            ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -515,6 +523,82 @@ function CupGames({ raw }: { raw: unknown }) {
         </tbody>
       </table>
     </details>
+  );
+}
+
+/** Soma J/V/E/D/GP/GC entre todas as competições do time (geral + casa + fora). */
+function ConsolidatedCard({ rows }: { rows: Record<string, unknown>[] }) {
+  const sum = (rs: Record<string, unknown>[], key: string) =>
+    rs.reduce((s, r) => s + (typeof r[key] === 'number' ? (r[key] as number) : 0), 0);
+  const cols = ['played', 'wins', 'draws', 'losses', 'gf', 'ga'];
+  const cleanSheets = sum(rows, 'clean_sheets');
+
+  const Row = ({ label, p, bold }: { label: string; p: string; bold?: boolean }) => (
+    <tr className={`border-t ${bold ? 'font-semibold' : ''}`}>
+      <td className="py-1.5 pr-3">{label}</td>
+      {cols.map((c) => (
+        <td key={c} className="py-1.5 text-center">
+          {sum(rows, `${p}${c}`)}
+        </td>
+      ))}
+    </tr>
+  );
+
+  return (
+    <div className="rounded border p-4">
+      <div className="mb-3 flex items-baseline justify-between">
+        <p className="font-medium">Todas as competições</p>
+        <p className="text-sm text-gray-500">
+          {rows.length} {rows.length === 1 ? 'competição' : 'competições'} · {cleanSheets} CS
+        </p>
+      </div>
+
+      {/* Por competição + total */}
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-gray-500">
+            <th className="py-1 text-left font-medium">Competição</th>
+            <th className="py-1 font-medium">J</th>
+            <th className="py-1 font-medium">V</th>
+            <th className="py-1 font-medium">E</th>
+            <th className="py-1 font-medium">D</th>
+            <th className="py-1 font-medium">GP</th>
+            <th className="py-1 font-medium">GC</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t">
+              <td className="py-1.5 pr-3">{(r.league as unknown as { name: string } | null)?.name ?? '—'}</td>
+              {cols.map((c) => (
+                <td key={c} className="py-1.5 text-center">{numCell(r[c])}</td>
+              ))}
+            </tr>
+          ))}
+          <Row label="Total" p="" bold />
+        </tbody>
+      </table>
+
+      {/* Total geral / casa / fora */}
+      <table className="mt-4 w-full text-sm">
+        <thead>
+          <tr className="text-gray-500">
+            <th className="py-1 text-left font-medium"></th>
+            <th className="py-1 font-medium">J</th>
+            <th className="py-1 font-medium">V</th>
+            <th className="py-1 font-medium">E</th>
+            <th className="py-1 font-medium">D</th>
+            <th className="py-1 font-medium">GP</th>
+            <th className="py-1 font-medium">GC</th>
+          </tr>
+        </thead>
+        <tbody>
+          <Row label="Geral" p="" />
+          <Row label="Casa" p="home_" />
+          <Row label="Fora" p="away_" />
+        </tbody>
+      </table>
+    </div>
   );
 }
 
