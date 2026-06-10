@@ -152,20 +152,16 @@ function tau(i: number, j: number, lh: number, la: number, rho: number): number 
   return 1;
 }
 
-/** Probabilidades de um confronto (Poisson com correção Dixon-Coles) a partir do modelo da liga. */
-export function matchProbabilities(
-  model: LeagueModel,
-  homeTeamId: string,
-  awayTeamId: string,
+/**
+ * Dadas as taxas esperadas de gols (λ) dos dois lados, devolve as probabilidades de
+ * resultado via matriz Poisson com correção Dixon-Coles. Núcleo comum aos modelos de
+ * liga (force por mando) e de seleções (Elo) — só muda como cada um chega no λ.
+ */
+export function outcomesFromLambdas(
+  lambdaHome: number,
+  lambdaAway: number,
   rho = RHO,
-): MatchProbabilities | null {
-  const h = model.teams.get(homeTeamId);
-  const a = model.teams.get(awayTeamId);
-  if (!h || !a) return null;
-
-  const lambdaHome = model.muHome * h.attackHome * a.defenseAway;
-  const lambdaAway = model.muAway * a.attackAway * h.defenseHome;
-
+): MatchProbabilities {
   const ph = Array.from({ length: MAX_GOALS + 1 }, (_, k) => poisson(k, lambdaHome));
   const pa = Array.from({ length: MAX_GOALS + 1 }, (_, k) => poisson(k, lambdaAway));
 
@@ -198,15 +194,21 @@ export function matchProbabilities(
       if (p > topScore.p) topScore = { home: i, away: j, p };
     }
   }
-  return {
-    lambdaHome,
-    lambdaAway,
-    homeWin,
-    draw,
-    awayWin,
-    over25,
-    under25: 1 - over25,
-    btts,
-    topScore,
-  };
+  return { lambdaHome, lambdaAway, homeWin, draw, awayWin, over25, under25: 1 - over25, btts, topScore };
+}
+
+/** Probabilidades de um confronto (Poisson com correção Dixon-Coles) a partir do modelo da liga. */
+export function matchProbabilities(
+  model: LeagueModel,
+  homeTeamId: string,
+  awayTeamId: string,
+  rho = RHO,
+): MatchProbabilities | null {
+  const h = model.teams.get(homeTeamId);
+  const a = model.teams.get(awayTeamId);
+  if (!h || !a) return null;
+
+  const lambdaHome = model.muHome * h.attackHome * a.defenseAway;
+  const lambdaAway = model.muAway * a.attackAway * h.defenseHome;
+  return outcomesFromLambdas(lambdaHome, lambdaAway, rho);
 }

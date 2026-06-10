@@ -73,9 +73,14 @@ export default async function ProbabilidadesPage() {
     <main className="mx-auto max-w-4xl p-6">
       <div className="mb-2 flex items-baseline justify-between">
         <h1 className="text-2xl font-bold">Probabilidades</h1>
-        <a href="/admin/probabilidades/calibracao" className="text-sm text-blue-600 hover:underline">
-          Calibração →
-        </a>
+        <div className="flex gap-3 text-sm">
+          <a href="/admin/probabilidades/copa" className="text-blue-600 hover:underline">
+            Copa do Mundo →
+          </a>
+          <a href="/admin/probabilidades/calibracao" className="text-blue-600 hover:underline">
+            Calibração →
+          </a>
+        </div>
       </div>
       <p className="mb-4 text-sm text-gray-500">
         Poisson + Dixon-Coles por mando, com ponderação por recência (jogos recentes pesam mais) na temporada{' '}
