@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStaff } from '@/lib/auth/staff';
 import { SyncButton } from '@/components/admin/sync-button';
+import { MatchStatsButton } from '@/components/admin/match-stats-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,8 +79,9 @@ export default async function AdminMatchesPage({
         Jogos da temporada atual das ligas ativas (via API ESPN). Clique num jogo para ver todos os dados.
       </p>
 
-      <div className="mb-6 rounded border p-4">
+      <div className="mb-6 flex flex-col gap-3 rounded border p-4">
         <SyncButton />
+        <MatchStatsButton />
       </div>
 
       <div className="mb-4 flex gap-1 border-b">

@@ -162,7 +162,7 @@ export type EspnSummary = {
   broadcasts: string[];
   headToHead: number;
   competitors: { homeAway: string; name: string; logo: string | null; score: string | null; winner: boolean }[];
-  statistics: { label: string; home: string; away: string }[];
+  statistics: { name: string; label: string; home: string; away: string }[];
   keyEvents: { time: string; type: string; team: string | null; text: string }[];
 };
 
@@ -184,16 +184,17 @@ export async function fetchEspnSummary(slug: string, eventId: string): Promise<E
   const homeId = comp.competitors?.find((c: any) => c.homeAway === 'home')?.team?.id;
   const awayId = comp.competitors?.find((c: any) => c.homeAway === 'away')?.team?.id;
 
-  // Estatísticas alinhadas mandante/visitante.
-  const statMap = new Map<string, { label: string; home: string; away: string }>();
+  // Estatísticas alinhadas mandante/visitante, indexadas pelo `name` estável da ESPN
+  // (camelCase, ex.: possessionPct, totalShots) — mais robusto que o label localizado.
+  const statMap = new Map<string, { name: string; label: string; home: string; away: string }>();
   for (const t of j?.boxscore?.teams ?? []) {
     const side = String(t.team?.id) === String(homeId) ? 'home' : String(t.team?.id) === String(awayId) ? 'away' : null;
     if (!side) continue;
     for (const st of t.statistics ?? []) {
-      const label = st.label ?? st.name ?? '';
-      const e = statMap.get(label) ?? { label, home: '', away: '' };
+      const name = st.name ?? st.label ?? '';
+      const e = statMap.get(name) ?? { name, label: st.label ?? st.name ?? '', home: '', away: '' };
       e[side] = st.displayValue ?? '';
-      statMap.set(label, e);
+      statMap.set(name, e);
     }
   }
 
