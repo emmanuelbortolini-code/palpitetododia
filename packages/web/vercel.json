@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/intl-history",
+      "schedule": "0 7 * * *"
+    },
+    {
       "path": "/api/cron/team-stats",
       "schedule": "30 7 * * *"
     },
