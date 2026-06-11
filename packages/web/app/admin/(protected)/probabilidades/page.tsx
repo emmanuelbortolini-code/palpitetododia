@@ -8,7 +8,11 @@ const CURRENT_SEASON = new Date().getFullYear();
 const UPCOMING = ['scheduled', 'live', 'postponed'];
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-export default async function ProbabilidadesPage() {
+export default async function ProbabilidadesPage({
+  searchParams,
+}: {
+  searchParams: { liga?: string };
+}) {
   await requireStaff(['admin']);
   const supabase = createAdminClient();
 
@@ -69,6 +73,20 @@ export default async function ProbabilidadesPage() {
     })
     .filter((g) => g.probs);
 
+  // Uma aba por liga (os jogos já vêm ordenados por data dentro de cada liga).
+  const byLeague = new Map<string, { name: string; items: typeof games }>();
+  for (const g of games) {
+    const lid = g.m.league_id as string;
+    const name = (g.m.league as unknown as { name: string } | null)?.name ?? '—';
+    if (!byLeague.has(lid)) byLeague.set(lid, { name, items: [] });
+    byLeague.get(lid)!.items.push(g);
+  }
+  const leagues = [...byLeague.entries()]
+    .map(([id, v]) => ({ id, name: v.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const selected = leagues.some((l) => l.id === searchParams.liga) ? searchParams.liga! : leagues[0]?.id;
+  const shown = selected ? byLeague.get(selected)!.items : [];
+
   return (
     <main className="mx-auto max-w-4xl p-6">
       <div className="mb-2 flex items-baseline justify-between">
@@ -92,6 +110,22 @@ export default async function ProbabilidadesPage() {
           Sem jogos para estimar. Confira se há jogos agendados e se o team_season_stats está sincronizado.
         </p>
       ) : (
+        <>
+        {leagues.length >= 1 && (
+          <div className="mb-4 flex flex-wrap gap-1 border-b">
+            {leagues.map((l) => (
+              <a
+                key={l.id}
+                href={`/admin/probabilidades?liga=${l.id}`}
+                className={`border-b-2 px-3 py-1.5 text-sm ${
+                  l.id === selected ? 'border-blue-600 font-medium text-blue-600' : 'border-transparent text-gray-500'
+                }`}
+              >
+                {l.name}
+              </a>
+            ))}
+          </div>
+        )}
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-gray-500">
@@ -106,7 +140,7 @@ export default async function ProbabilidadesPage() {
             </tr>
           </thead>
           <tbody>
-            {games.map(({ m, probs }) => {
+            {shown.map(({ m, probs }) => {
               const p = probs!;
               const home = (m.home as unknown as { name: string } | null)?.name ?? '—';
               const away = (m.away as unknown as { name: string } | null)?.name ?? '—';
@@ -138,6 +172,7 @@ export default async function ProbabilidadesPage() {
             })}
           </tbody>
         </table>
+        </>
       )}
     </main>
   );
