@@ -3,8 +3,9 @@ import { fetchEspnLeagueTeams } from '@/lib/espn';
 
 const SEASON = new Date().getFullYear();
 
+const deaccent = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 const norm = (s: string) =>
-  (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  deaccent(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const slugify = (name: string) =>
   norm(name).replace(/ /g, '-').slice(0, 110) || 'time';
 
@@ -120,10 +121,12 @@ export async function syncFootballMissingTeams(limit = 9): Promise<FootballFillR
 
   const FILL = ['code', 'founded', 'venue_name', 'venue_address', 'venue_city', 'venue_capacity', 'logo_url'];
 
-  // Times canônicos só-ESPN sem dados AF.
+  // Times canônicos só-ESPN sem dados AF. O code do país distingue clube de seleção:
+  // as seleções da Copa têm país "Internacional" (code UN); no AF elas vêm com
+  // national=true e país = o próprio país, então o filtro por país Brasil não serve.
   const { data: missing } = await supabase
     .from('teams')
-    .select(`id, name, ${FILL.join(', ')}`)
+    .select(`id, name, country:country_id(code), ${FILL.join(', ')}`)
     .is('merged_into', null)
     .not('espn_id', 'is', null)
     .is('api_football_id', null)
@@ -136,14 +139,34 @@ export async function syncFootballMissingTeams(limit = 9): Promise<FootballFillR
   const { data: used } = await supabase.from('teams').select('api_football_id').not('api_football_id', 'is', null);
   const usedAf = new Set((used ?? []).map((u) => String(u.api_football_id)));
 
+  // Seleções juvenis/femininas que o AF devolve junto da principal (excluídas).
+  const isYouthOrW = (n: string) => /\bu-?\d|\bw\b|women|olympic|futsal/i.test(n);
+  // Nome no AF difere do nome ESPN (a busca por seleção não acha sozinha).
+  const AF_SEARCH_ALIAS: Record<string, string> = {
+    'United States': 'USA',
+    'Czechia': 'Czech Republic',
+    'Bosnia-Herzegovina': 'Bosnia and Herzegovina',
+  };
+
   let matched = 0, skipped = 0;
   for (const team of all.slice(0, limit)) {
     const name = String(team.name);
-    const r = await fetch(`${afBase}/teams?search=${encodeURIComponent(name)}`, { headers: { 'x-apisports-key': afKey } });
+    const isNational = (team.country as { code?: string } | null)?.code === 'UN';
+    // Busca sem acento (a busca do AF não casa o "ç" de Curaçao, p.ex.); apelido p/ nomes divergentes.
+    const r = await fetch(`${afBase}/teams?search=${encodeURIComponent(deaccent(AF_SEARCH_ALIAS[name] ?? name))}`, { headers: { 'x-apisports-key': afKey } });
     const j = await r.json();
     if (j.errors && (j.errors.rateLimit || j.errors.requests)) break; // atingiu limite/min: para o lote
-    const cands = (j.response ?? []).filter((x: any) => x.team?.country === 'Brazil');
-    const hit = cands.find((x: any) => norm(x.team.name) === norm(name));
+    // Seleção: só seleções principais (national=true, sem juvenil/feminino).
+    // Clube: país Brasil e não-seleção.
+    const cands = (j.response ?? []).filter((x: any) =>
+      isNational
+        ? x.team?.national === true && !isYouthOrW(x.team?.name ?? '')
+        : x.team?.country === 'Brazil' && !x.team?.national,
+    );
+    // Casa por nome exato; se só sobrou UMA seleção principal, aceita mesmo sem nome
+    // idêntico (ex.: "Cape Verde" -> "Cape Verde Islands"). Não chuta quando há ambiguidade.
+    let hit = cands.find((x: any) => norm(x.team.name) === norm(name));
+    if (!hit && isNational && cands.length === 1) hit = cands[0];
     if (!hit || usedAf.has(String(hit.team.id))) { skipped++; continue; }
 
     const snap = afSnapshot(hit);

@@ -205,6 +205,21 @@ export async function unlinkTeam(aliasId: string) {
   revalidatePath('/admin/equipes');
 }
 
+// Remove o vínculo de enriquecimento com o API-Football (api_football_id setado na
+// própria linha, p.ex. via "Sincronizar Equipes da API Football"). Diferente de
+// unlinkProvider (editar), não recria linha no pool nem redireciona — só limpa, p/ a
+// lista da tela de vincular atualizar. Os campos já preenchidos permanecem.
+export async function clearFootballLink(teamId: string) {
+  await requireStaff(['admin']);
+  const supabase = createAdminClient();
+  await supabase
+    .from('teams')
+    .update({ api_football_id: null, api_football_data: null, updated_at: new Date().toISOString() })
+    .eq('id', teamId);
+  revalidatePath('/admin/equipes/match');
+  revalidatePath('/admin/equipes');
+}
+
 // ── Vínculo por fonte na tela de editar (abas Dados ESPN / Dados Football API) ──
 
 export type Source = 'espn' | 'football';

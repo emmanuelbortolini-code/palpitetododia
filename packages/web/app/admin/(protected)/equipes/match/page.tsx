@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { linkTeam, unlinkTeam } from '@/lib/actions/teams';
+import { linkTeam, unlinkTeam, clearFootballLink } from '@/lib/actions/teams';
 
 export const dynamic = 'force-dynamic';
 
@@ -121,8 +121,36 @@ export default async function MatchTeamsPage() {
         ))}
       </div>
 
-      <h2 className="mb-2 mt-8 font-semibold">Vinculados ({linked.length})</h2>
-      {!linked.length && <p className="text-gray-500">Nenhum vínculo ainda.</p>}
+      <h2 className="mb-2 mt-8 font-semibold">Vinculados ao API-Football ({canonicals.length})</h2>
+      {!canonicals.length && <p className="text-gray-500">Nenhum time vinculado ao API-Football ainda.</p>}
+      <table className="w-full text-sm">
+        <tbody>
+          {[...canonicals]
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((t) => (
+              <tr key={t.id} className="border-b">
+                <td className="flex items-center gap-2 py-1.5">
+                  {t.logo_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={t.logo_url} alt="" className="h-5 w-5 object-contain" />
+                  )}
+                  {t.name}
+                </td>
+                <td className="py-1.5 text-gray-500">API-Football {t.api_football_id}</td>
+                <td className="py-1.5 text-right">
+                  <form action={clearFootballLink.bind(null, t.id)}>
+                    <button type="submit" className="text-blue-600 hover:underline">
+                      Desfazer
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+
+      <h2 className="mb-2 mt-8 font-semibold">Fusões ESPN↔API-Football — deduplicação ({linked.length})</h2>
+      {!linked.length && <p className="text-gray-500">Nenhuma fusão ainda.</p>}
       <table className="w-full text-sm">
         <tbody>
           {linked.map((t) => {
