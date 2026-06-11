@@ -7,14 +7,16 @@ import { createAdminClient } from '@/lib/supabase/admin';
 
 const SOCCER = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 
-// slug ESPN -> importância (peso K do Elo).
+// slug ESPN -> importância (peso K do Elo). Mantido em sincronia com scripts/sync-wc-history.cjs.
 const COMPS: Record<string, number> = {
   'fifa.friendly': 20,
   'fifa.worldq.uefa': 30, 'fifa.worldq.conmebol': 30, 'fifa.worldq.concacaf': 30,
   'fifa.worldq.afc': 30, 'fifa.worldq.caf': 30, 'fifa.worldq.ofc': 30,
-  'uefa.nations': 30, 'concacaf.nations': 30,
-  'uefa.euro': 40, 'conmebol.america': 40, 'caf.nations': 40, 'afc.asian': 40,
-  'concacaf.gold': 35, 'ofc.nations': 35,
+  'fifa.worldq.afc.conmebol': 30, 'fifa.worldq.concacaf.ofc': 30, 'fifa.wcq.ply': 30,
+  'uefa.nations': 30, 'concacaf.nations.league': 30,
+  'uefa.euroq': 30, 'afc.cupq': 30,
+  'uefa.euro': 40, 'conmebol.america': 40, 'caf.nations': 40, 'afc.asian.cup': 40,
+  'concacaf.gold': 35,
   'fifa.world': 50,
 };
 

@@ -65,11 +65,14 @@ export function computeElo(games: IntlGame[]): EloRatings {
   return out;
 }
 
-// Conversão Elo -> gols esperados (sede neutra). Calibráveis no backtest da Copa:
-//  - TOTAL_GOALS: média de gols por jogo internacional.
-//  - SUP_DIV: a cada SUP_DIV pontos de Elo, ~1 gol de vantagem esperada.
+// Conversão Elo -> gols esperados (sede neutra). Tunados por sweep no walk-forward
+// internacional (scripts/tune-elo-goals.cjs, 4931 jogos):
+//  - TOTAL_GOALS: média de gols por jogo (observada ~2.73).
+//  - SUP_DIV: a cada SUP_DIV pontos de Elo, ~1 gol de vantagem esperada. 140 (era 200)
+//    afia o 1X2 — o modelo estava sub-confiante na supremacia. Platô plano 120-150.
+// Brier 1X2 0.560 vs baseline 0.639 (era 0.579); log-loss 0.947.
 const TOTAL_GOALS = 2.6;
-const SUP_DIV = 200;
+const SUP_DIV = 140;
 const MIN_LAMBDA = 0.15;
 
 export function eloToLambdas(ratingHome: number, ratingAway: number): { lambdaHome: number; lambdaAway: number } {
