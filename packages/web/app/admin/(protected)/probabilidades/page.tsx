@@ -1,6 +1,8 @@
 import { requireStaff } from '@/lib/auth/staff';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { buildLeagueModel, buildWeightedLeagueModel, matchProbabilities, type LeagueModel, type Game } from '@/lib/probability';
+import { computeElo, eloMatchProbabilities } from '@/lib/elo';
+import { loadIntlHistory } from '@/lib/intl-history';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,31 +83,65 @@ export default async function ProbabilidadesPage({
     if (!byLeague.has(lid)) byLeague.set(lid, { name, items: [] });
     byLeague.get(lid)!.items.push(g);
   }
-  const leagues = [...byLeague.entries()]
-    .map(([id, v]) => ({ id, name: v.name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  // Copa do Mundo entra como mais uma aba, com modelo próprio (Elo de seleções).
+  const { data: wcLeague } = await supabase
+    .from('leagues')
+    .select('id, name')
+    .eq('slug', 'copa-do-mundo-fifa')
+    .maybeSingle();
+  const { data: wcMatches } = wcLeague
+    ? await supabase
+        .from('matches')
+        .select('id, scheduled_at, league_id, home_team_id, away_team_id, home:home_team_id(name, espn_id), away:away_team_id(name, espn_id), league:league_id(name)')
+        .eq('league_id', wcLeague.id)
+        .in('status', UPCOMING)
+        .order('scheduled_at', { ascending: true })
+        .limit(120)
+    : { data: [] };
+  const hasWc = !!wcLeague && (wcMatches ?? []).length > 0;
+
+  const leagues = [
+    ...[...byLeague.entries()].map(([id, v]) => ({ id, name: v.name })),
+    ...(hasWc ? [{ id: wcLeague!.id as string, name: wcLeague!.name as string }] : []),
+  ].sort((a, b) => a.name.localeCompare(b.name));
   const selected = leagues.some((l) => l.id === searchParams.liga) ? searchParams.liga! : leagues[0]?.id;
-  const shown = selected ? byLeague.get(selected)!.items : [];
+
+  // O Elo (histórico internacional) só é computado quando a aba da Copa está selecionada.
+  const isWc = hasWc && selected === wcLeague!.id;
+  const eloByTeam = new Map<string, number>();
+  let shown: typeof games = [];
+  if (isWc) {
+    const intl = await loadIntlHistory(supabase);
+    const elo = computeElo(intl);
+    const ratingOf = (espnId: string | null | undefined) => (espnId ? elo.get(String(espnId))?.rating ?? 1500 : 1500);
+    shown = (wcMatches ?? []).map((m) => {
+      const home = m.home as unknown as { espn_id: string | null } | null;
+      const away = m.away as unknown as { espn_id: string | null } | null;
+      const rh = ratingOf(home?.espn_id);
+      const ra = ratingOf(away?.espn_id);
+      eloByTeam.set(m.home_team_id as string, rh);
+      eloByTeam.set(m.away_team_id as string, ra);
+      return { m, probs: eloMatchProbabilities(rh, ra) };
+    }) as unknown as typeof games;
+  } else if (selected) {
+    shown = byLeague.get(selected)?.items ?? [];
+  }
 
   return (
     <main className="mx-auto max-w-4xl p-6">
       <div className="mb-2 flex items-baseline justify-between">
         <h1 className="text-2xl font-bold">Probabilidades</h1>
-        <div className="flex gap-3 text-sm">
-          <a href="/admin/probabilidades/copa" className="text-blue-600 hover:underline">
-            Copa do Mundo →
-          </a>
-          <a href="/admin/probabilidades/calibracao" className="text-blue-600 hover:underline">
-            Calibração →
-          </a>
-        </div>
+        <a href="/admin/probabilidades/calibracao" className="text-sm text-blue-600 hover:underline">
+          Calibração →
+        </a>
       </div>
       <p className="mb-4 text-sm text-gray-500">
-        Poisson + Dixon-Coles por mando, com ponderação por recência (jogos recentes pesam mais) na temporada{' '}
-        {CURRENT_SEASON}. Próximos jogos das ligas com tabela; forma = últimos 5 (mais recente à esquerda).
+        {isWc
+          ? 'Copa do Mundo: Elo internacional das seleções convertido em gols esperados (Poisson + Dixon-Coles), sede neutra. O número ao lado de cada seleção é o Elo.'
+          : `Poisson + Dixon-Coles por mando, com ponderação por recência (jogos recentes pesam mais) na temporada ${CURRENT_SEASON}. Próximos jogos das ligas com tabela; forma = últimos 5 (mais recente à esquerda).`}
       </p>
 
-      {!games.length ? (
+      {!leagues.length ? (
         <p className="text-sm text-gray-500">
           Sem jogos para estimar. Confira se há jogos agendados e se o team_season_stats está sincronizado.
         </p>
@@ -153,10 +189,16 @@ export default async function ProbabilidadesPage({
                     {formByTeam.has(m.home_team_id as string) && (
                       <span className="ml-1 font-mono text-xs text-gray-400">{formByTeam.get(m.home_team_id as string)}</span>
                     )}
+                    {eloByTeam.has(m.home_team_id as string) && (
+                      <span className="ml-1 font-mono text-xs text-gray-400">{eloByTeam.get(m.home_team_id as string)!.toFixed(0)}</span>
+                    )}
                     <span className="text-gray-400"> x </span>
                     {away}
                     {formByTeam.has(m.away_team_id as string) && (
                       <span className="ml-1 font-mono text-xs text-gray-400">{formByTeam.get(m.away_team_id as string)}</span>
+                    )}
+                    {eloByTeam.has(m.away_team_id as string) && (
+                      <span className="ml-1 font-mono text-xs text-gray-400">{eloByTeam.get(m.away_team_id as string)!.toFixed(0)}</span>
                     )}
                   </td>
                   <td className="py-1.5 text-center font-medium">{pct(p.homeWin)}</td>
