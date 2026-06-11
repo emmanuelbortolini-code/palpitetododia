@@ -142,7 +142,12 @@ export default async function EditarEquipePage({
       {tab === 'temporada' && <SeasonTab teamId={params.id} supabase={supabase} />}
 
       {tab === 'estatisticas' && (
-        <StatsTab teamId={params.id} comp={searchParams.comp ?? ''} supabase={supabase} />
+        <StatsTab
+          teamId={params.id}
+          espnId={providerOf('espn')?.id ?? null}
+          comp={searchParams.comp ?? ''}
+          supabase={supabase}
+        />
       )}
 
       {(tab === 'espn' || tab === 'football') && (
@@ -372,12 +377,84 @@ async function SeasonTab({
   );
 }
 
+// ---- Estatísticas de seleções (Copa): agregadas dos jogos internacionais ----
+// Clubes têm team_season_stats (ESPN, por liga); seleções não (a liga da Copa é
+// track_stats=false p/ não entrar no modelo doméstico, e o torneio mal começou). Para
+// manter o MESMO padrão visual, agregamos international_matches (ciclo atual, desde 2024)
+// por categoria de competição e montamos linhas no formato dos cards de clube. Sede neutra
+// é comum em seleções → split Casa/Fora/Neutro. Calculado on-the-fly (sem tabela nova).
+const INTL_CATEGORIES = [
+  { label: 'Copa do Mundo', id: 'intl-mundo' },
+  { label: 'Eliminatórias', id: 'intl-eliminatorias' },
+  { label: 'Continental / Nações', id: 'intl-continental' },
+  { label: 'Amistosos', id: 'intl-amistosos' },
+];
+function intlCategory(slug: string): string {
+  if (slug === 'fifa.friendly') return 'Amistosos';
+  if (slug === 'fifa.world') return 'Copa do Mundo';
+  if (slug.startsWith('fifa.worldq') || slug === 'fifa.wcq.ply' || slug === 'uefa.euroq' || slug === 'afc.cupq')
+    return 'Eliminatórias';
+  return 'Continental / Nações';
+}
+
+type IntlRow = { home_espn_id: unknown; away_espn_id: unknown; home_goals: number; away_goals: number; neutral: boolean; competition: string };
+type IntlAgg = { played: number; wins: number; draws: number; losses: number; gf: number; ga: number; cs: number };
+
+async function loadNationalStatsRows(
+  supabase: ReturnType<typeof createAdminClient>,
+  espnId: string,
+): Promise<Record<string, unknown>[]> {
+  const { data } = await supabase
+    .from('international_matches')
+    .select('home_espn_id, away_espn_id, home_goals, away_goals, neutral, competition')
+    .or(`home_espn_id.eq.${espnId},away_espn_id.eq.${espnId}`)
+    .gte('played_at', '2024-01-01');
+  const games = (data ?? []) as IntlRow[];
+  if (!games.length) return [];
+
+  const blank = (): IntlAgg => ({ played: 0, wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, cs: 0 });
+  const bump = (a: IntlAgg, gf: number, ga: number) => {
+    a.played++; a.gf += gf; a.ga += ga;
+    if (gf > ga) a.wins++; else if (gf < ga) a.losses++; else a.draws++;
+    if (ga === 0) a.cs++;
+  };
+  const cats = new Map<string, { tot: IntlAgg; home: IntlAgg; away: IntlAgg; neutral: IntlAgg }>();
+  for (const g of games) {
+    const isHome = String(g.home_espn_id) === String(espnId);
+    const gf = isHome ? g.home_goals : g.away_goals;
+    const ga = isHome ? g.away_goals : g.home_goals;
+    const cat = intlCategory(g.competition);
+    let e = cats.get(cat);
+    if (!e) cats.set(cat, (e = { tot: blank(), home: blank(), away: blank(), neutral: blank() }));
+    bump(e.tot, gf, ga);
+    bump(g.neutral ? e.neutral : isHome ? e.home : e.away, gf, ga);
+  }
+
+  const split = (pfx: string, a: IntlAgg) => ({
+    [`${pfx}played`]: a.played, [`${pfx}wins`]: a.wins, [`${pfx}draws`]: a.draws,
+    [`${pfx}losses`]: a.losses, [`${pfx}gf`]: a.gf, [`${pfx}ga`]: a.ga,
+  });
+  return INTL_CATEGORIES.filter((c) => cats.get(c.label)?.tot.played).map((c) => {
+    const e = cats.get(c.label)!;
+    return {
+      league: { name: c.label }, league_id: c.id, season: 'desde 2024',
+      rank: null, points: null,
+      played: e.tot.played, wins: e.tot.wins, draws: e.tot.draws, losses: e.tot.losses,
+      gf: e.tot.gf, ga: e.tot.ga, gd: e.tot.gf - e.tot.ga,
+      ...split('home_', e.home), ...split('away_', e.away), ...split('neutral_', e.neutral),
+      clean_sheets: e.tot.cs, raw: null,
+    };
+  });
+}
+
 async function StatsTab({
   teamId,
+  espnId,
   comp,
   supabase,
 }: {
   teamId: string;
+  espnId: string | null;
   comp: string;
   supabase: ReturnType<typeof createAdminClient>;
 }) {
@@ -386,7 +463,9 @@ async function StatsTab({
     .select('*, league:league_id(name)')
     .eq('team_id', teamId)
     .order('season', { ascending: false });
-  const rows = (data ?? []) as Record<string, unknown>[];
+  const clubRows = (data ?? []) as Record<string, unknown>[];
+  const nationalRows = espnId ? await loadNationalStatsRows(supabase, espnId) : [];
+  const rows = [...clubRows, ...nationalRows];
 
   if (!rows.length) {
     return (
@@ -491,6 +570,7 @@ function SeasonStatsCard({ r }: { r: Record<string, unknown> }) {
           <Split label="Geral" p="" />
           {hasSplits && <Split label="Casa" p="home_" />}
           {hasSplits && <Split label="Fora" p="away_" />}
+          {r.neutral_played != null && <Split label="Neutro" p="neutral_" />}
         </tbody>
       </table>
       <DetailedStats raw={r.raw} />
@@ -596,6 +676,7 @@ function ConsolidatedCard({ rows }: { rows: Record<string, unknown>[] }) {
           <Row label="Geral" p="" />
           <Row label="Casa" p="home_" />
           <Row label="Fora" p="away_" />
+          {rows.some((r) => r.neutral_played != null) && <Row label="Neutro" p="neutral_" />}
         </tbody>
       </table>
 
