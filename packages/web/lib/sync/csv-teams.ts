@@ -49,6 +49,8 @@ const MAPPINGS: Mapping[] = [
   { csv: 'Founded Year', col: 'founded', read: optInt },
   { csv: 'Stadium Name', col: 'venue_name', read: (v) => (v ?? '').trim() || null },
   { csv: 'Stadium Address', col: 'venue_address', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Stadium City', col: 'venue_city', read: (v) => (v ?? '').trim() || null },
+  { csv: 'Stadium Capacity', col: 'venue_capacity', read: optInt },
   { csv: 'Official Sites', col: 'website', read: (v) => (v ?? '').trim() || null },
   { csv: 'Nicknames (EN)', col: 'nicknames_en', read: parseNicknames },
   { csv: 'Nicknames (BR)', col: 'nicknames_pt', read: parseNicknames },

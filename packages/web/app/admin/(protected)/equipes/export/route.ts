@@ -16,6 +16,8 @@ const HEADER = [
   'Founded Year',
   'Stadium Name',
   'Stadium Address',
+  'Stadium City',
+  'Stadium Capacity',
   'Official Sites',
   'Nicknames (EN)',
   'Nicknames (BR)',
@@ -50,7 +52,7 @@ export async function GET() {
   const { data: teams, error } = await supabase
     .from('teams')
     .select(
-      'api_football_id, espn_id, name, name_en, name_es, slug, slug_en, slug_es, founded, venue_name, venue_address, website, nicknames_en, nicknames_pt, nicknames_es, gender_en, gender_br, gender_es, logo_url, country:country_id(name)',
+      'api_football_id, espn_id, name, name_en, name_es, slug, slug_en, slug_es, founded, venue_name, venue_address, venue_city, venue_capacity, website, nicknames_en, nicknames_pt, nicknames_es, gender_en, gender_br, gender_es, logo_url, country:country_id(name)',
     )
     .is('merged_into', null)
     .order('name', { ascending: true });
@@ -72,6 +74,8 @@ export async function GET() {
         t.founded,
         t.venue_name,
         t.venue_address,
+        t.venue_city,
+        t.venue_capacity,
         t.website,
         nicks(t.nicknames_en as Nick[] | null),
         nicks(t.nicknames_pt as Nick[] | null),
